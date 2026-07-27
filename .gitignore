@@ -1,0 +1,26 @@
+# Données de base
+*.csv
+*.xlsx
+*.sql
+*.parquet
+mlflow.db
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+env/
+venv/
+.venv/
+.env/
+
+# Distribution / Data
+projet_morel.egg-info/
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+
+#docs inutiles
+*.pdf
