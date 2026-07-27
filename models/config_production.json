@@ -1,0 +1,29 @@
+{
+  "features_model": [
+    "customer_value_score",
+    "Panier_Moyen_N_signature_3",
+    "GrandCompte",
+    "clp_contrat_ap_stat",
+    "annees_depuis_dernier_achat",
+    "Turnover_N_signature_1",
+    "Panier_Moyen_N_signature_1",
+    "%EC",
+    "Nb_lignes_N_signature_1",
+    "Turnover_N_signature_3",
+    "Famille_2_N_signature_2",
+    "Panier_Moyen_N_signature_2",
+    "act_val_cust_3M",
+    "annees_depuis_1ere_facture",
+    "Famille_0_N_signature_1",
+    "Famille_2_N_signature_1",
+    "Famille_11_N_signature_1",
+    "Famille_14_N_signature_1",
+    "division",
+    "Famille_9_N_signature_3"
+  ],
+  "colonnes_cat": [
+    "division",
+    "clp_contrat_ap_stat"
+  ],
+  "seuil_production": 0.05
+}
