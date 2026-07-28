@@ -1,31 +1,36 @@
 # 1. Image de base légère et stable
 FROM python:3.12-slim
 
-# Evite la génération de fichiers .pyc et force l'affichage direct des logs Python dans la console
+# Évite la génération de fichiers .pyc et force l'affichage direct des logs Python dans la console
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=10000
 
-# Working directory dans le conteneur
+# Répertoire de travail dans le conteneur
 WORKDIR /app
 
-# Installation des dépendances système nécessaires (ex: compilation basique si besoin)
+# Installation des dépendances système nécessaires
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    && rm -rf /lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/*
 
-# 2. Gestion du cache des dépendances
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+# 2. Copie préalable des fichiers de dépendances pour optimiser le cache Docker
+COPY requirements.txt* pyproject.toml* setup.py* ./
 
-# 3. Copie des fichiers du projet dans le conteneur
-COPY src/ ./src/
-COPY models/ ./models/
-# Si tu utilises aussi un dossier artifacts/, décommente la ligne ci-dessous :
-# COPY artifacts/ ./artifacts/
+# Installation/Mise à niveau de pip
+RUN pip install --no-cache-dir --upgrade pip
 
-# 4. Exposition du port (par défaut 7860 sur Hugging Face Spaces)
-EXPOSE 7860
+# Installation depuis requirements.txt si présent, sinon installation du projet
+RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
 
-# 5. Commande de démarrage d'Uvicorn
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "7860"]
+# 3. Copie de l'intégralité du projet (src, models, artifacts, etc.)
+COPY . .
+
+# Installation du projet en mode éditable si pyproject.toml ou setup.py existe
+RUN if [ -f pyproject.toml ] || [ -f setup.py ]; then pip install --no-cache-dir -e .; fi
+
+# 4. Exposition du port (Render utilise par défaut 10000)
+EXPOSE 10000
+
+# 5. Commande de démarrage d'Uvicorn s'adaptant dynamiquement au port fourni par Render
+CMD uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-10000}
