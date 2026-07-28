@@ -1,0 +1,99 @@
+artifact_path: file:c:/Users/15GIRAV/Moi/Boulot/OpenClassrooms/P8_Confirmez_vos_competences_en_MLOPS_partie_2_2/notebooks/mlruns/2/models/m-f2e4f81daa6e474182b7a2f5eebb4ae9/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.12.8
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.9.0
+    skops_trusted_types: null
+is_signature_from_type_hint: false
+mlflow_version: 3.14.0
+model_id: m-f2e4f81daa6e474182b7a2f5eebb4ae9
+model_size_bytes: 816573
+model_uuid: m-f2e4f81daa6e474182b7a2f5eebb4ae9
+prompts: null
+run_id: 380f7b3cccb44a218a1e1ea80c438cf4
+signature:
+  inputs: '[{"type": "long", "name": "Unnamed: 0", "required": true}, {"type": "double",
+    "name": "Famille_6_N_signature_4", "required": true}, {"type": "double", "name":
+    "Famille_4_N_signature_1", "required": true}, {"type": "double", "name": "Famille_10_N_signature_3",
+    "required": true}, {"type": "double", "name": "Famille_10_N_signature_1", "required":
+    true}, {"type": "double", "name": "Famille_8_N_signature_3", "required": true},
+    {"type": "double", "name": "Famille_12_N_signature_4", "required": true}, {"type":
+    "double", "name": "Famille_1_N_signature_3", "required": true}, {"type": "double",
+    "name": "Famille_3_N_signature_2", "required": true}, {"type": "double", "name":
+    "Famille_3_N_signature_4", "required": true}, {"type": "double", "name": "Famille_2_N_signature_2",
+    "required": true}, {"type": "double", "name": "Nb_lignes_N_signature_3", "required":
+    true}, {"type": "double", "name": "Famille_14_N_signature_2", "required": true},
+    {"type": "double", "name": "Famille_5_N_signature_1", "required": true}, {"type":
+    "string", "name": "division", "required": true}, {"type": "double", "name": "Famille_4_N_signature_3",
+    "required": true}, {"type": "double", "name": "Famille_2_N_signature_3", "required":
+    true}, {"type": "double", "name": "Famille_8_N_signature_1", "required": true},
+    {"type": "double", "name": "Famille_0_N_signature_2", "required": true}, {"type":
+    "double", "name": "Famille_12_N_signature_2", "required": true}, {"type": "double",
+    "name": "Famille_0_N_signature_3", "required": true}, {"type": "double", "name":
+    "Famille_11_N_signature_3", "required": true}, {"type": "double", "name": "Famille_9_N_signature_4",
+    "required": true}, {"type": "double", "name": "Famille_4_N_signature_2", "required":
+    true}, {"type": "double", "name": "Famille_14_N_signature_3", "required": true},
+    {"type": "double", "name": "Famille_6_N_signature_1", "required": true}, {"type":
+    "double", "name": "Famille_16_N_signature_3", "required": true}, {"type": "double",
+    "name": "Turnover_N_signature_1", "required": true}, {"type": "double", "name":
+    "Nb_lignes_N_signature_1", "required": true}, {"type": "double", "name": "Famille_10_N_signature_4",
+    "required": true}, {"type": "double", "name": "Famille_16_N_signature_2", "required":
+    true}, {"type": "double", "name": "Famille_6_N_signature_3", "required": true},
+    {"type": "double", "name": "Panier_Moyen_N_signature_1", "required": true}, {"type":
+    "double", "name": "Famille_9_N_signature_2", "required": true}, {"type": "double",
+    "name": "Famille_3_N_signature_3", "required": true}, {"type": "double", "name":
+    "Turnover_N_signature_4", "required": true}, {"type": "double", "name": "Famille_13_N_signature_4",
+    "required": true}, {"type": "double", "name": "Famille_11_N_signature_4", "required":
+    true}, {"type": "double", "name": "Famille_10_N_signature_2", "required": true},
+    {"type": "double", "name": "Famille_0_N_signature_4", "required": true}, {"type":
+    "double", "name": "Famille_16_N_signature_1", "required": true}, {"type": "double",
+    "name": "Famille_0_N_signature_1", "required": true}, {"type": "double", "name":
+    "Famille_14_N_signature_1", "required": true}, {"type": "double", "name": "Panier_Moyen_N_signature_3",
+    "required": true}, {"type": "double", "name": "Famille_11_N_signature_1", "required":
+    true}, {"type": "double", "name": "Panier_Moyen_N_signature_2", "required": true},
+    {"type": "double", "name": "Famille_5_N_signature_2", "required": true}, {"type":
+    "double", "name": "Famille_2_N_signature_1", "required": true}, {"type": "long",
+    "name": "Panier_Moyen_N_signature_4", "required": true}, {"type": "double", "name":
+    "Famille_2_N_signature_4", "required": true}, {"type": "double", "name": "Famille_12_N_signature_3",
+    "required": true}, {"type": "double", "name": "Famille_12_N_signature_1", "required":
+    true}, {"type": "double", "name": "Famille_9_N_signature_1", "required": true},
+    {"type": "double", "name": "Famille_3_N_signature_1", "required": true}, {"type":
+    "double", "name": "Turnover_N_signature_2", "required": true}, {"type": "double",
+    "name": "Famille_8_N_signature_2", "required": true}, {"type": "double", "name":
+    "Famille_6_N_signature_2", "required": true}, {"type": "double", "name": "Famille_5_N_signature_4",
+    "required": true}, {"type": "double", "name": "Turnover_N_signature_3", "required":
+    true}, {"type": "double", "name": "Famille_13_N_signature_2", "required": true},
+    {"type": "double", "name": "Famille_16_N_signature_4", "required": true}, {"type":
+    "double", "name": "Nb_lignes_N_signature_2", "required": true}, {"type": "double",
+    "name": "Famille_11_N_signature_2", "required": true}, {"type": "double", "name":
+    "Famille_1_N_signature_4", "required": true}, {"type": "double", "name": "Famille_8_N_signature_4",
+    "required": true}, {"type": "double", "name": "Famille_1_N_signature_2", "required":
+    true}, {"type": "double", "name": "Nb_lignes_N_signature_4", "required": true},
+    {"type": "double", "name": "Famille_13_N_signature_1", "required": true}, {"type":
+    "double", "name": "Famille_9_N_signature_3", "required": true}, {"type": "double",
+    "name": "Famille_4_N_signature_4", "required": true}, {"type": "double", "name":
+    "Famille_1_N_signature_1", "required": true}, {"type": "double", "name": "Famille_14_N_signature_4",
+    "required": true}, {"type": "double", "name": "Famille_5_N_signature_3", "required":
+    true}, {"type": "double", "name": "Famille_13_N_signature_3", "required": true},
+    {"type": "boolean", "name": "act_val_cust_3M", "required": true}, {"type": "double",
+    "name": "customer_value_score", "required": false}, {"type": "double", "name":
+    "branche", "required": true}, {"type": "string", "name": "clp_contrat_ap_stat",
+    "required": false}, {"type": "double", "name": "annees_depuis_1ere_facture", "required":
+    true}, {"type": "double", "name": "annees_depuis_dernier_achat", "required": true},
+    {"type": "double", "name": "code_departemental", "required": true}, {"type": "double",
+    "name": "pot_40_calc", "required": true}, {"type": "boolean", "name": "GrandCompte",
+    "required": true}, {"type": "double", "name": "%EC", "required": true}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "int64", "shape": [-1]}}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-07-28 08:06:16.523676'

@@ -5,6 +5,7 @@
 *.parquet
 mlflow.db
 data/
+notebooks/mlruns/
 
 # Python
 __pycache__/
@@ -21,6 +22,7 @@ projet_morel.egg-info/
 build/
 dist/
 .ipynb_checkpoints/
+.postman/
 
 #docs inutiles
 *.pdf

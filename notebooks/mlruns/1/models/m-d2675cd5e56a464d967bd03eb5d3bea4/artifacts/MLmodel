@@ -1,0 +1,23 @@
+artifact_path: file:c:/Users/15GIRAV/Moi/Boulot/OpenClassrooms/P8_Confirmez_vos_competences_en_MLOPS_partie_2_2/notebooks/mlruns/1/models/m-d2675cd5e56a464d967bd03eb5d3bea4/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.12.8
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.9.0
+    skops_trusted_types: null
+mlflow_version: 3.14.0
+model_id: m-d2675cd5e56a464d967bd03eb5d3bea4
+model_size_bytes: 806582
+model_uuid: m-d2675cd5e56a464d967bd03eb5d3bea4
+prompts: null
+run_id: 13b84e2930fa48f59ae7230ce0609848
+utc_time_created: '2026-07-28 07:55:31.884515'

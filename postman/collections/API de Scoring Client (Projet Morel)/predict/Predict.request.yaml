@@ -1,0 +1,35 @@
+$kind: http-request
+description: Reçoit un payload JSON contenant les 20 variables du modèle et renvoie la prédiction.
+url: "{{baseUrl}}/predict"
+method: POST
+headers:
+  Content-Type: application/json
+  Accept: application/json
+body:
+  type: json
+  content: |-
+    {
+      "Panier_Moyen_N_signature_3": 2687.869091992936,
+      "GrandCompte": false,
+      "annees_depuis_dernier_achat": 2623.320596618437,
+      "Turnover_N_signature_1": 5762.599228525335,
+      "Panier_Moyen_N_signature_1": 4371.5169054969165,
+      "%EC": 5144.708686979835,
+      "Nb_lignes_N_signature_1": 7708.355576601016,
+      "Turnover_N_signature_3": 3581.7341423699245,
+      "Famille_2_N_signature_2": 1980.5370702629332,
+      "Panier_Moyen_N_signature_2": 9951.077156129582,
+      "act_val_cust_3M": true,
+      "annees_depuis_1ere_facture": 1848.785690219934,
+      "Famille_0_N_signature_1": 7450.429268026683,
+      "Famille_2_N_signature_1": 7772.893846691484,
+      "Famille_11_N_signature_1": 4482.495417909995,
+      "Famille_14_N_signature_1": 4088.433951576821,
+      "Famille_9_N_signature_3": 8806.646793202635,
+      "customer_value_score": 1954.1889986573613,
+      "clp_contrat_ap_stat": "string",
+      "division": null
+    }
+settings: {}
+examples: ./.resources/Predict.resources/examples
+order: 1000
