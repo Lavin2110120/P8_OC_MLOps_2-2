@@ -1,28 +1,69 @@
-# Données de base
+# ==========================================
+# 1. Données, BDD & MLflow
+# ==========================================
 *.csv
 *.xlsx
 *.sql
 *.parquet
+*.db
+*.sqlite
 mlflow.db
 data/
-notebooks/mlruns/
+artifacts/
+mlruns/
+**/mlruns/
 
-# Python
+# A voir si je les exclue ou pas
+# *.joblib
+# *.pkl
+
+# ==========================================
+# 2. Python & Environnements
+# ==========================================
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+
+# Environnements virtuels (fichiers ET dossiers)
 env/
 venv/
 .venv/
 .env/
+ENV/
+env.bak/
+venv.bak/
 
-# Distribution / Data
-projet_morel.egg-info/
-*.egg-info/
-build/
-dist/
+# Fichiers d'environnement (secrets, clés API, etc.)
+.env
+.env.*
+!.env.example
+
+# ==========================================
+# 3. Notebooks & Outils de Dev
+# ==========================================
 .ipynb_checkpoints/
 .postman/
-
-#docs inutiles
 *.pdf
+
+# Cache Pytest, Coverage & MLOps
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# ==========================================
+# 4. Packaging & Distribution
+# ==========================================
+build/
+dist/
+*.egg-info/
+*.egg
+
+# ==========================================
+# 5. Fichiers Système & IDE (Très recommandé)
+# ==========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
