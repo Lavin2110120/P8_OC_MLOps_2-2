@@ -147,3 +147,34 @@ def test_predict_negative_years_validation(client):
     
     response = client.post("/predict", json=payload)
     assert response.status_code == 422
+
+def test_predict_with_none_optional_fields(client):
+    """Vérifie que la prédiction fonctionne même quand les champs optionnels sont None."""
+    payload = {
+        "customer_value_score": None,
+        "Panier_Moyen_N_signature_3": 120.5,
+        "GrandCompte": False,
+        "clp_contrat_ap_stat": None,
+        "annees_depuis_dernier_achat": 1.5,
+        "Turnover_N_signature_1": 3500.0,
+        "Panier_Moyen_N_signature_1": 150.0,
+        "%EC": 12.5,
+        "Nb_lignes_N_signature_1": 8.0,
+        "Turnover_N_signature_3": 1500.0,
+        "Famille_2_N_signature_2": 0.0,
+        "Panier_Moyen_N_signature_2": 135.0,
+        "act_val_cust_3M": True,
+        "annees_depuis_1ere_facture": 4.2,
+        "Famille_0_N_signature_1": 0.0,
+        "Famille_2_N_signature_1": 0.0,
+        "Famille_11_N_signature_1": 0.0,
+        "Famille_14_N_signature_1": 0.0,
+        "division": None,
+        "Famille_9_N_signature_3": 0.0
+    }
+    
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["prediction"] in [0, 1]

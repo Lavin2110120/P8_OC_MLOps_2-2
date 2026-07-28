@@ -1,4 +1,7 @@
+import json
+import time
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -10,6 +13,23 @@ from pydantic import BaseModel, ConfigDict, Field
 # Dictionnaire global pour stocker le pipeline (chargé une seule fois au démarrage)
 ml_models: Dict[str, Any] = {}
 
+# --- CONFIGURATION DU LOGGING POUR EVIDENTLY / MONITORING ---
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+LOGS_DIR = PROJECT_ROOT / "logs"
+LOGS_DIR.mkdir(parents=True, exist_ok=True)
+PREDICTIONS_LOG_FILE = LOGS_DIR / "predictions.jsonl"
+
+
+def log_prediction(payload: Dict[str, Any]):
+    """
+    Écrit un enregistrement au format JSON Lines (JSONL) pour le monitoring.
+    """
+    try:
+        with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
+            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except Exception as e:
+        print(f"⚠️ Erreur lors de l'écriture du log : {e}")
+
 
 # --- GESTION DU CYCLE DE VIE (LIFESPAN) ---
 @asynccontextmanager
@@ -17,13 +37,10 @@ async def lifespan(app: FastAPI):
     """
     Charge le pipeline ML au démarrage et libère la mémoire à l'arrêt.
     """
-    project_root = Path(__file__).resolve().parent.parent
-
-    # On teste en priorité le fichier généré par le notebook d'entraînement
     candidate_paths = [
-        project_root / "models" / "best_pipeline_xgboost_epure.pkl",
-        project_root / "models" / "best_pipeline_production.joblib",
-        project_root / "artifacts" / "best_model_pipeline.joblib",
+        PROJECT_ROOT / "models" / "best_pipeline_xgboost_epure.pkl",
+        PROJECT_ROOT / "models" / "best_pipeline_production.joblib",
+        PROJECT_ROOT / "artifacts" / "best_model_pipeline.joblib",
     ]
 
     model_path = None
@@ -201,7 +218,11 @@ def health_check():
 def predict(data: ClientData):
     """
     Reçoit un payload JSON contenant les 20 variables du modèle et renvoie la prédiction.
+    Enregistre également la requête, le résultat et la latence dans un log JSON.
     """
+    start_time = time.perf_counter()
+    timestamp = datetime.now(timezone.utc).isoformat()
+
     pipeline = ml_models.get("pipeline")
     if not pipeline:
         raise HTTPException(
@@ -209,9 +230,9 @@ def predict(data: ClientData):
             detail="Le modèle n'est pas initialisé.",
         )
 
+    input_dict = data.model_dump(by_alias=True)
+
     try:
-        # Conversion Pydantic -> Dict avec les alias de noms de colonnes originaux (%EC)
-        input_dict = data.model_dump(by_alias=True)
         input_df = pd.DataFrame([input_dict])
 
         # Cast des colonnes catégorielles attendues sous forme de catégorie Pandas
@@ -220,7 +241,7 @@ def predict(data: ClientData):
             if col in input_df.columns:
                 input_df[col] = input_df[col].astype("category")
 
-        # Inférence directe sur le DataFrame
+        # Inférence
         prediction = int(pipeline.predict(input_df)[0])
 
         probability = None
@@ -228,11 +249,35 @@ def predict(data: ClientData):
             proba_array = pipeline.predict_proba(input_df)
             probability = float(proba_array[0][1])
 
+        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+        # Enregistrement du log de succès
+        log_entry = {
+            "timestamp": timestamp,
+            "inputs": input_dict,
+            "prediction": prediction,
+            "probability": probability,
+            "latency_ms": execution_time_ms,
+            "status": "success",
+        }
+        log_prediction(log_entry)
+
         return PredictionResponse(
             prediction=prediction, probability=probability, status="success"
         )
 
     except Exception as e:
+        execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        # Enregistrement du log d'erreur
+        log_entry = {
+            "timestamp": timestamp,
+            "inputs": input_dict,
+            "error": str(e),
+            "latency_ms": execution_time_ms,
+            "status": "error",
+        }
+        log_prediction(log_entry)
+
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Erreur lors de la prédiction : {str(e)}",
