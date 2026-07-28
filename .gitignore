@@ -43,7 +43,7 @@ venv.bak/
 # 3. Notebooks & Outils de Dev
 # ==========================================
 .ipynb_checkpoints/
-.postman/
+postman/
 *.pdf
 
 # Cache Pytest, Coverage & MLOps

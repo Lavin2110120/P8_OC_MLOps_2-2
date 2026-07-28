@@ -1,9 +1,0 @@
-$kind: http-request
-description: Page d'accueil de l'API.
-url: "{{baseUrl}}/"
-method: GET
-headers:
-  Accept: application/json
-settings: {}
-examples: ./.resources/Read Root.resources/examples
-order: 1000

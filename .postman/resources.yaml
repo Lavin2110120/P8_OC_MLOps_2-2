@@ -1,0 +1,15 @@
+workspace:
+  id: 89c18da3-6bd2-47dd-856f-d150c6bc82fb
+
+# Each entry here maps a local resource to one or more corresponding objects in Postman Cloud
+
+cloudResources:
+  collections:
+    ../postman/collections/API de Scoring Client (Projet Morel): 2d5ffe65-cc2d-431f-813b-77a790b861ae
+
+localResources:
+  specs:
+    - ../postman/specs/API de Scoring Client (Projet Morel)/index.json
+resourceNameMappings:
+  specs:
+    - ../postman/specs/API de Scoring Client (Projet Morel)/index.json: API de Scoring Client (Projet Morel)

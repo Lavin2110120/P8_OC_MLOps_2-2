@@ -1,4 +1,0 @@
-$kind: collection
-description: API MLOps d'inférence basée sur les 20 features réelles du modèle.
-variables:
-  baseUrl: /
