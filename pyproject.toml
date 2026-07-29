@@ -25,7 +25,8 @@ dependencies = [
     # Experiment Tracking & MLOPs
     "mlflow >= 2.10.0",
     "sqlalchemy >= 2.0.0",
-    
+    "evidently >= 0.4.0",
+
     # API Web (FastAPI)
     "fastapi >= 0.109.0",
     "pydantic >= 2.6.0",
@@ -34,9 +35,25 @@ dependencies = [
     # Testing & Client HTTP
     "pytest >= 8.0.0",
     "httpx >= 0.27.0",
-    
+
     # Notebooks & File Utilities
+<<<<<<< HEAD
     "ipykernel >= 6.29.0",
     "Jinja2 >= 3.1.0",
     "openpyxl >= 3.1.0"
 ]
+=======
+    "ipykernel>=6.29.0",
+    "Jinja2>=3.1.0",
+    "openpyxl>=3.1.0"
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests", "test"]
+markers = ["performance: marqueurs pour les tests de performance de latence et charge"]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+>>>>>>> bc6e882 (add storage data with space postgresql)

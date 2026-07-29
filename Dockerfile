@@ -32,5 +32,32 @@ RUN if [ -f pyproject.toml ] || [ -f setup.py ]; then pip install --no-cache-dir
 # 4. Exposition du port (Render utilise par défaut 10000)
 EXPOSE 10000
 
+<<<<<<< HEAD
 # 5. Commande de démarrage d'Uvicorn s'adaptant dynamiquement au port fourni par Render
 CMD uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-10000}
+=======
+# Dépendance runtime minimale pour PostgreSQL
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Création d'un utilisateur non-root pour la sécurité
+RUN adduser --disabled-password --gecos "" appuser
+
+# Copie des bibliothèques installées du builder vers le runtime
+COPY --from=builder /install /usr/local
+
+# Copie du code source (dossier src/) et des modèles ONNX
+COPY ./src /app/src
+COPY ./models /app/models
+
+# Structure des logs et attribution des permissions à appuser
+RUN mkdir -p /app/logs && chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8000
+
+# Démarrage de l'API avec Uvicorn pointant sur src.main:app
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+>>>>>>> bc6e882 (add storage data with space postgresql)
