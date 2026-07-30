@@ -8,9 +8,10 @@ from typing import Any, Dict, Optional
 import joblib
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
-# Dictionnaire global pour stocker le pipeline (chargé une seule fois au démarrage)
+# Dictionnaire global pour stocker le pipeline
 ml_models: Dict[str, Any] = {}
 
 # --- CONFIGURATION DU LOGGING POUR EVIDENTLY / MONITORING ---
@@ -21,9 +22,7 @@ PREDICTIONS_LOG_FILE = LOGS_DIR / "predictions.jsonl"
 
 
 def log_prediction(payload: Dict[str, Any]):
-    """
-    Écrit un enregistrement au format JSON Lines (JSONL) pour le monitoring.
-    """
+    """Écrit un enregistrement au format JSON Lines (JSONL) pour le monitoring."""
     try:
         with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
@@ -34,9 +33,7 @@ def log_prediction(payload: Dict[str, Any]):
 # --- GESTION DU CYCLE DE VIE (LIFESPAN) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Charge le pipeline ML au démarrage et libère la mémoire à l'arrêt.
-    """
+    """Charge le pipeline ML au démarrage et libère la mémoire à l'arrêt."""
     candidate_paths = [
         PROJECT_ROOT / "models" / "best_pipeline_xgboost_epure.pkl",
         PROJECT_ROOT / "models" / "best_pipeline_production.joblib",
@@ -60,7 +57,6 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Nettoyage à l'arrêt
     ml_models.clear()
     print("🧹 Ressources du modèle libérées.")
 
@@ -73,96 +69,49 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# --- CONFIGURATION CORS ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Process-Time-Ms"],
+)
+
 
 # --- MIDDLEWARE : MESURE DE LATENCE ET EN-TÊTE HTTP ---
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
-    """
-    Intercepte toutes les requêtes HTTP, calcule leur temps d'exécution
-    et injecte la latence (ms) dans l'en-tête de réponse 'X-Process-Time-Ms'.
-    """
     start_time = time.perf_counter()
-
-    # Traitement de la requête par FastAPI
     response = await call_next(request)
-
-    # Calcul de la latence globale de la requête
     process_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-
-    # Ajout du temps dans les headers HTTP de réponse
     response.headers["X-Process-Time-Ms"] = str(process_time_ms)
     return response
 
 
-# --- SCHÉMAS PYDANTIC (VALIDATION DES DONNÉES) ---
+# --- SCHÉMAS PYDANTIC ---
 class ClientData(BaseModel):
-    """
-    Schéma Pydantic représentant exactement les 20 features d'entrée du modèle.
-    """
-
-    customer_value_score: Optional[float] = Field(
-        None, description="Score de valeur client", examples=[50.0]
-    )
-    Panier_Moyen_N_signature_3: float = Field(
-        ..., description="Panier moyen signature 3", examples=[120.5]
-    )
-    GrandCompte: bool = Field(
-        ..., description="Indicateur Grand Compte", examples=[False]
-    )
-    clp_contrat_ap_stat: Optional[str] = Field(
-        None, description="Statut contrat AP (Catégorielle)", examples=["STAT_01"]
-    )
-    annees_depuis_dernier_achat: float = Field(
-        ..., ge=0.0, description="Années depuis le dernier achat", examples=[1.5]
-    )
-    Turnover_N_signature_1: float = Field(
-        ..., description="Chiffre d'affaires signature 1", examples=[3500.0]
-    )
-    Panier_Moyen_N_signature_1: float = Field(
-        ..., description="Panier moyen signature 1", examples=[150.0]
-    )
-    percent_EC: float = Field(
-        ...,
-        alias="%EC",
-        description="Pourcentage EC",
-        examples=[12.5],
-    )
-    Nb_lignes_N_signature_1: float = Field(
-        ..., description="Nombre de lignes signature 1", examples=[8.0]
-    )
-    Turnover_N_signature_3: float = Field(
-        ..., description="Chiffre d'affaires signature 3", examples=[1500.0]
-    )
-    Famille_2_N_signature_2: float = Field(
-        ..., description="Famille 2 signature 2", examples=[0.0]
-    )
-    Panier_Moyen_N_signature_2: float = Field(
-        ..., description="Panier moyen signature 2", examples=[135.0]
-    )
-    act_val_cust_3M: bool = Field(
-        ..., description="Valeur client active sur 3 mois", examples=[True]
-    )
-    annees_depuis_1ere_facture: float = Field(
-        ..., ge=0.0, description="Années depuis la première facture", examples=[4.2]
-    )
-    Famille_0_N_signature_1: float = Field(
-        ..., description="Famille 0 signature 1", examples=[0.0]
-    )
-    Famille_2_N_signature_1: float = Field(
-        ..., description="Famille 2 signature 1", examples=[0.0]
-    )
-    Famille_11_N_signature_1: float = Field(
-        ..., description="Famille 11 signature 1", examples=[0.0]
-    )
-    Famille_14_N_signature_1: float = Field(
-        ..., description="Famille 14 signature 1", examples=[0.0]
-    )
-    division: Optional[str] = Field(
-        None, description="Division (Catégorielle)", examples=["DIV_A"]
-    )
-    Famille_9_N_signature_3: float = Field(
-        ..., description="Famille 9 signature 3", examples=[0.0]
-    )
+    customer_value_score: Optional[float] = Field(None, description="Score de valeur client", examples=[50.0])
+    Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3", examples=[120.5])
+    GrandCompte: bool = Field(..., description="Indicateur Grand Compte", examples=[False])
+    clp_contrat_ap_stat: Optional[str] = Field(None, description="Statut contrat AP", examples=["STAT_01"])
+    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat", examples=[1.5])
+    Turnover_N_signature_1: float = Field(..., description="CA signature 1", examples=[3500.0])
+    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1", examples=[150.0])
+    percent_EC: float = Field(..., alias="%EC", description="Pourcentage EC", examples=[12.5])
+    Nb_lignes_N_signature_1: float = Field(..., description="Nb lignes signature 1", examples=[8.0])
+    Turnover_N_signature_3: float = Field(..., description="CA signature 3", examples=[1500.0])
+    Famille_2_N_signature_2: float = Field(..., description="Famille 2 signature 2", examples=[0.0])
+    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2", examples=[135.0])
+    act_val_cust_3M: bool = Field(..., description="Valeur client active 3 mois", examples=[True])
+    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis 1ère facture", examples=[4.2])
+    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1", examples=[0.0])
+    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1", examples=[0.0])
+    Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1", examples=[0.0])
+    Famille_14_N_signature_1: float = Field(..., description="Famille 14 signature 1", examples=[0.0])
+    division: Optional[str] = Field(None, description="Division", examples=["DIV_A"])
+    Famille_9_N_signature_3: float = Field(..., description="Famille 9 signature 3", examples=[0.0])
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -194,37 +143,20 @@ class ClientData(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    """
-    Schéma de la réponse de prédiction.
-    """
-
-    prediction: int = Field(
-        ..., description="Classe prédite par le modèle (0 ou 1)"
-    )
-    probability: Optional[float] = Field(
-        None, description="Probabilité associée à la classe positive (1)"
-    )
-    status: str = Field("success", description="Statut de la requête")
+    prediction: int = Field(..., description="Classe prédite (0 ou 1)")
+    probability: Optional[float] = Field(None, description="Probabilité classe 1")
+    status: str = Field("success", description="Statut")
 
 
-# --- ENDPOINTS / ROUTES ---
+# --- ENDPOINTS ---
 @app.get("/", tags=["Général"])
 def read_root():
-    """
-    Page d'accueil de l'API.
-    """
-    return {
-        "message": "Bienvenue sur l'API de Scoring Client (Projet Morel). Rendez-vous sur /docs pour Swagger UI."
-    }
+    return {"message": "Bienvenue sur l'API de Scoring Client. Rendez-vous sur /docs."}
 
 
 @app.get("/health", tags=["Monitoring"])
 def health_check():
-    """
-    Vérification de la santé de l'API et du chargement du modèle ML.
-    """
-    is_model_loaded = "pipeline" in ml_models
-    if not is_model_loaded:
+    if "pipeline" not in ml_models:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Le modèle ML n'est pas encore chargé.",
@@ -232,14 +164,8 @@ def health_check():
     return {"status": "healthy", "model_loaded": True}
 
 
-@app.post(
-    "/predict", response_model=PredictionResponse, tags=["Machine Learning"]
-)
+@app.post("/predict", response_model=PredictionResponse, tags=["Machine Learning"])
 def predict(data: ClientData):
-    """
-    Reçoit un payload JSON contenant les 20 variables du modèle et renvoie la prédiction.
-    Enregistre également la requête, le résultat et la latence dans un log JSON.
-    """
     start_time = time.perf_counter()
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -255,13 +181,11 @@ def predict(data: ClientData):
     try:
         input_df = pd.DataFrame([input_dict])
 
-        # Cast des colonnes catégorielles attendues sous forme de catégorie Pandas
         cat_cols = ["clp_contrat_ap_stat", "division"]
         for col in cat_cols:
             if col in input_df.columns:
                 input_df[col] = input_df[col].astype("category")
 
-        # Inférence
         prediction = int(pipeline.predict(input_df)[0])
 
         probability = None
@@ -271,7 +195,6 @@ def predict(data: ClientData):
 
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
-        # Enregistrement du log de succès
         log_entry = {
             "timestamp": timestamp,
             "inputs": input_dict,
@@ -288,7 +211,6 @@ def predict(data: ClientData):
 
     except Exception as e:
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        # Enregistrement du log d'erreur
         log_entry = {
             "timestamp": timestamp,
             "inputs": input_dict,
