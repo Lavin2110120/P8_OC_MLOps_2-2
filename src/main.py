@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
@@ -5,16 +6,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import joblib
+import numpy as np
+import onnxruntime as ort
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
-# Dictionnaire global pour stocker le pipeline
+from src.database import AsyncSessionLocal, Base, engine
+from src.models import PredictionLog
+
+# Dictionnaire global pour stocker la session ONNX
 ml_models: Dict[str, Any] = {}
 
-# --- CONFIGURATION DU LOGGING POUR EVIDENTLY / MONITORING ---
+# --- CONFIGURATION DU LOGGING POUR MONITORING / EVIDENTLY ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOGS_DIR = PROJECT_ROOT / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -27,17 +32,44 @@ def log_prediction(payload: Dict[str, Any]):
         with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
     except Exception as e:
-        print(f"⚠️ Erreur lors de l'écriture du log : {e}")
+        print(f"⚠️ Erreur lors de l'écriture du log JSONL : {e}")
+
+
+async def log_prediction_to_db(log_data: dict):
+    """Insère un log de prédiction dans PostgreSQL de façon asynchrone."""
+    try:
+        async with AsyncSessionLocal() as db:
+            log_entry = PredictionLog(
+                timestamp=datetime.fromisoformat(log_data["timestamp"]),
+                inputs=log_data["inputs"],
+                prediction=log_data.get("prediction", -1),
+                probability=log_data.get("probability"),
+                latency_ms=log_data["latency_ms"],
+                engine=log_data.get("engine", "onnxruntime"),
+                status=log_data.get("status", "success"),
+            )
+            db.add(log_entry)
+            await db.commit()
+    except Exception as e:
+        print(f"⚠️ Erreur lors de l'insertion en BDD : {e}")
 
 
 # --- GESTION DU CYCLE DE VIE (LIFESPAN) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Charge le pipeline ML au démarrage et libère la mémoire à l'arrêt."""
+    """Initialise les tables PostgreSQL et charge le modèle ONNX au démarrage."""
+    # Création des tables PostgreSQL si elles n'existent pas
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("✅ Tables PostgreSQL vérifiées / créées avec succès.")
+    except Exception as e:
+        print(f"⚠️ Avertissement BDD : Impossible de créer les tables : {e}")
+
     candidate_paths = [
-        PROJECT_ROOT / "models" / "best_pipeline_xgboost_epure.pkl",
-        PROJECT_ROOT / "models" / "best_pipeline_production.joblib",
-        PROJECT_ROOT / "artifacts" / "best_model_pipeline.joblib",
+        PROJECT_ROOT / "models" / "best_pipeline_xgboost.onnx",
+        PROJECT_ROOT / "models" / "model_xgboost.onnx",
+        PROJECT_ROOT / "artifacts" / "model.onnx",
     ]
 
     model_path = None
@@ -48,24 +80,30 @@ async def lifespan(app: FastAPI):
 
     if not model_path:
         raise FileNotFoundError(
-            f"Aucun artefact de modèle trouvé parmi : {[str(p) for p in candidate_paths]}"
+            f"Aucun artefact ONNX trouvé parmi : {[str(p) for p in candidate_paths]}"
         )
 
-    print(f"🔄 Chargement du pipeline ML depuis : {model_path}")
-    ml_models["pipeline"] = joblib.load(model_path)
-    print("✅ Pipeline ML chargé avec succès et prêt pour l'inférence !")
+    print(f"🔄 Chargement de la session ONNX Runtime depuis : {model_path}")
+
+    session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+
+    ml_models["onnx_session"] = session
+    ml_models["input_names"] = [inp.name for inp in session.get_inputs()]
+    ml_models["output_names"] = [out.name for out in session.get_outputs()]
+
+    print("✅ Modèle ONNX chargé avec succès et prêt pour l'inférence !")
 
     yield
 
     ml_models.clear()
-    print("🧹 Ressources du modèle libérées.")
+    print("🧹 Ressources ONNX libérées.")
 
 
 # --- INITIALISATION DE L'APPLICATION FASTAPI ---
 app = FastAPI(
-    title="API de Scoring Client (Projet Morel)",
-    description="API MLOps d'inférence basée sur les 20 features réelles du modèle.",
-    version="2.0.0",
+    title="API de Scoring Client (Projet Morel - ONNX Runtime)",
+    description="API MLOps haute performance optimisée avec ONNX Runtime.",
+    version="2.1.0",
     lifespan=lifespan,
 )
 
@@ -80,7 +118,7 @@ app.add_middleware(
 )
 
 
-# --- MIDDLEWARE : MESURE DE LATENCE ET EN-TÊTE HTTP ---
+# --- MIDDLEWARE : MESURE DE LATENCE ---
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.perf_counter()
@@ -151,47 +189,89 @@ class PredictionResponse(BaseModel):
 # --- ENDPOINTS ---
 @app.get("/", tags=["Général"])
 def read_root():
-    return {"message": "Bienvenue sur l'API de Scoring Client. Rendez-vous sur /docs."}
+    return {"message": "Bienvenue sur l'API de Scoring Client (ONNX Runtime). Rendez-vous sur /docs."}
 
 
 @app.get("/health", tags=["Monitoring"])
 def health_check():
-    if "pipeline" not in ml_models:
+    if "onnx_session" not in ml_models:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Le modèle ML n'est pas encore chargé.",
+            detail="Le modèle ONNX n'est pas chargé.",
         )
-    return {"status": "healthy", "model_loaded": True}
+    return {"status": "healthy", "engine": "onnxruntime", "model_loaded": True}
 
 
 @app.post("/predict", response_model=PredictionResponse, tags=["Machine Learning"])
-def predict(data: ClientData):
+async def predict(data: ClientData, background_tasks: BackgroundTasks):
     start_time = time.perf_counter()
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    pipeline = ml_models.get("pipeline")
-    if not pipeline:
+    session: ort.InferenceSession = ml_models.get("onnx_session")
+    if not session:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Le modèle n'est pas initialisé.",
+            detail="La session ONNX n'est pas initialisée.",
         )
 
     input_dict = data.model_dump(by_alias=True)
 
     try:
         input_df = pd.DataFrame([input_dict])
+        inputs_onnx = {}
+        input_inputs = session.get_inputs()
 
-        cat_cols = ["clp_contrat_ap_stat", "division"]
-        for col in cat_cols:
-            if col in input_df.columns:
-                input_df[col] = input_df[col].astype("category")
+        # Cas 1 : Modèle ONNX qui attend une unique matrice 2D en float32
+        if len(input_inputs) == 1 and input_inputs[0].type == "tensor(float)":
+            numeric_df = input_df.copy()
 
-        prediction = int(pipeline.predict(input_df)[0])
+            for col in numeric_df.columns:
+                if numeric_df[col].dtype == "bool":
+                    numeric_df[col] = numeric_df[col].astype(np.float32)
+                elif numeric_df[col].dtype == "object":
+                    numeric_df[col] = pd.to_numeric(numeric_df[col], errors="coerce").fillna(0.0)
 
-        probability = None
-        if hasattr(pipeline, "predict_proba"):
-            proba_array = pipeline.predict_proba(input_df)
-            probability = float(proba_array[0][1])
+            arr = numeric_df.to_numpy().astype(np.float32)
+
+            expected_shape = input_inputs[0].shape
+            if len(expected_shape) > 1 and isinstance(expected_shape[1], int):
+                expected_dim = expected_shape[1]
+                if arr.shape[1] < expected_dim:
+                    padding = np.zeros((arr.shape[0], expected_dim - arr.shape[1]), dtype=np.float32)
+                    arr = np.hstack([arr, padding])
+
+            inputs_onnx[input_inputs[0].name] = arr
+
+        # Cas 2 : Pipeline ONNX complet (entrée multi-colonnes / multi-types)
+        else:
+            for inp in input_inputs:
+                col_name = inp.name
+                if col_name in input_df:
+                    val = input_df[col_name].values
+                    if "float" in inp.type:
+                        val = val.astype(np.float32)
+                    elif "int64" in inp.type:
+                        val = val.astype(np.int64)
+                    elif "string" in inp.type:
+                        val = val.astype(str)
+                    inputs_onnx[col_name] = val.reshape(-1, 1)
+
+        # Inférence ONNX Runtime sur Worker Thread
+        outputs = await asyncio.to_thread(session.run, None, inputs_onnx)
+
+        if len(outputs) >= 2:
+            prediction = int(outputs[0][0])
+            raw_proba = outputs[1]
+
+            if isinstance(raw_proba, list) and isinstance(raw_proba[0], dict):
+                probability = float(raw_proba[0].get(1, raw_proba[0].get("1", 0.0)))
+            elif isinstance(raw_proba, np.ndarray):
+                probability = float(raw_proba[0][1])
+            else:
+                probability = float(outputs[1][0])
+        else:
+            prediction = int(outputs[0][0])
+            probability = float(outputs[0][0])
 
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
@@ -201,9 +281,13 @@ def predict(data: ClientData):
             "prediction": prediction,
             "probability": probability,
             "latency_ms": execution_time_ms,
+            "engine": "onnxruntime",
             "status": "success",
         }
-        log_prediction(log_entry)
+        
+        # Tâches de fond : écriture JSONL + insertion BDD PostgreSQL
+        background_tasks.add_task(log_prediction, log_entry)
+        background_tasks.add_task(log_prediction_to_db, log_entry)
 
         return PredictionResponse(
             prediction=prediction, probability=probability, status="success"
@@ -216,11 +300,15 @@ def predict(data: ClientData):
             "inputs": input_dict,
             "error": str(e),
             "latency_ms": execution_time_ms,
+            "engine": "onnxruntime",
             "status": "error",
         }
-        log_prediction(log_entry)
+        
+        # Tâches de fond d'erreur : écriture JSONL + insertion BDD PostgreSQL
+        background_tasks.add_task(log_prediction, log_entry)
+        background_tasks.add_task(log_prediction_to_db, log_entry)
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Erreur lors de la prédiction : {str(e)}",
+            detail=f"Erreur lors de l'inférence ONNX : {str(e)}",
         )

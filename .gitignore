@@ -52,6 +52,7 @@ postman/
 .coverage
 htmlcov/
 .mypy_cache/
+scripts/analyze_drift.py
 
 # ==========================================
 # 4. Packaging & Distribution
@@ -61,8 +62,17 @@ dist/
 *.egg-info/
 *.egg
 
+# --- LOGS ET MONITORING ---
+# Ignorer tous les fichiers de logs d'inférence
+logs/*.jsonl
+logs/*.log
+
+# --- EVITER D'IGNORER LE .GITKEEP ---
+!logs/.gitkeep
+!reports/.gitkeep
+
 # ==========================================
-# 5. Fichiers Système & IDE (Très recommandé)
+# 5. Fichiers Système & IDE
 # ==========================================
 .DS_Store
 Thumbs.db
