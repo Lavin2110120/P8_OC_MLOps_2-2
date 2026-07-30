@@ -90,10 +90,8 @@ def load_model():
 def ensure_reference_predictions(reference_df: pd.DataFrame) -> pd.DataFrame:
     """
     Le CSV de référence (X_train.csv) ne contient que les features d'entraînement,
-    pas de colonne 'prediction'. Sans cette étape, TargetDriftPreset ne se déclenche
-    jamais avec la vraie référence (seulement dans le fallback de split simulé),
-    ce qui prive le rapport du suivi de la distribution des scores prédits demandé
-    par Chloé. On score donc la référence avec le pipeline en production.
+    pas de colonne 'prediction'. On score donc la référence avec le pipeline en production
+    afin d'activer TargetDriftPreset dans Evidently.
     """
     if "prediction" in reference_df.columns:
         return reference_df
@@ -107,15 +105,8 @@ def ensure_reference_predictions(reference_df: pd.DataFrame) -> pd.DataFrame:
         if col in df.columns:
             df[col] = df[col].astype("category")
 
-    # IMPORTANT : on conserve l'ordre des colonnes tel qu'il existe déjà dans df
-    # (= l'ordre d'entraînement, features_model_epure trié par importance),
-    # et non l'ordre de la liste FEATURES qui, elle, ne sert qu'à regrouper
-    # numériques/catégorielles pour le ColumnMapping Evidently. Le pipeline
-    # (via SimpleImputer.feature_names_in_) valide un ordre strict des colonnes.
     cols_for_model = [c for c in df.columns if c in FEATURES]
 
-    # Filet de sécurité : si le pipeline expose l'ordre exact appris au fit
-    # (SimpleImputer le fait toujours), on s'aligne dessus explicitement.
     expected_order = getattr(
         getattr(pipeline, "named_steps", {}).get("imputer"), "feature_names_in_", None
     )
@@ -125,13 +116,25 @@ def ensure_reference_predictions(reference_df: pd.DataFrame) -> pd.DataFrame:
     df["prediction"] = pipeline.predict(df[cols_for_model])
     return df
 
+
 def analyze_operational_metrics(log_path: Path):
+    """
+    Calcule et affiche les métriques de santé de l'API (volumétrie, taux de succès, latences).
+    """
+    if not log_path.exists():
+        print(f"⚠️ Aucun fichier de log trouvé pour les métriques opérationnelles à {log_path}")
+        return
+
     df_raw = []
     with open(log_path, mode="r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
                 df_raw.append(json.loads(line))
     
+    if not df_raw:
+        print("⚠️ Le fichier de log est vide.")
+        return
+
     df_logs = pd.DataFrame(df_raw)
     
     total_reqs = len(df_logs)
@@ -148,6 +151,7 @@ def analyze_operational_metrics(log_path: Path):
         print(f" • Latence moyenne : {mean_lat:.2f} ms")
         print(f" • Latence p95     : {p95_lat:.2f} ms")
     print("========================================\n")
+
 
 def generate_drift_report():
     print("🔄 Chargement des données de référence et de production...")
@@ -166,9 +170,6 @@ def generate_drift_report():
 
     cols_to_compare = [c for c in FEATURES if c in current_df.columns and c in reference_df.columns]
 
-    # Configuration du ColumnMapping pour Evidently 0.6.x
-    # (numerical_features / categorical_features explicites : plus fiable que
-    # l'inférence automatique, en particulier pour les colonnes booléennes)
     column_mapping = ColumnMapping()
     column_mapping.numerical_features = [c for c in NUMERICAL_FEATURES if c in cols_to_compare]
     column_mapping.categorical_features = [c for c in CATEGORICAL_FEATURES if c in cols_to_compare]
@@ -197,4 +198,8 @@ def generate_drift_report():
 
 
 if __name__ == "__main__":
+    # 1. Analyse préalable des métriques opérationnelles (latence, taux de succès, volumétrie)
+    analyze_operational_metrics(LOGS_FILE)
+    
+    # 2. Génération du rapport HTML Evidently AI pour le Data & Target Drift
     generate_drift_report()
