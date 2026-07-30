@@ -5,23 +5,62 @@ on:
     branches: [ main, test ]
 
 jobs:
+  # 1. Tests unitaires et de latence Python
   test:
-    name: Run Pytest
+    name: Run Pytest (Unit & Performance)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
           cache: "pip"
-      - run: |
+
+      - name: Install Dependencies
+        run: |
           python -m pip install --upgrade pip
           pip install -e .
-      - run: pytest
 
+      - name: Run Pytest
+        run: pytest
+
+  # 2. Validation de l'image Docker & Smoke Test du conteneur
+  docker-check:
+    name: Build & Test Docker Image
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build -t scoring-api:test .
+
+      - name: Run Container & Smoke Test
+        run: |
+          # Lancement du conteneur en arrière-plan sur le port 8000
+          docker run -d --name test-api -p 8000:8000 scoring-api:test
+          
+          # Pause pour laisser le temps à Uvicorn / ONNX de démarrer
+          sleep 5
+          
+          # Test de santé (Smoke test) sur le conteneur en cours d'exécution
+          curl --fail http://localhost:8000/health || (docker logs test-api && exit 1)
+
+      - name: Stop and Cleanup Container
+        if: always()
+        run: |
+          docker stop test-api || true
+          docker rm test-api || true
+
+  # 3. Déploiement automatique sur Render
   deploy:
     name: Trigger Render Deployment
-    needs: test
+    needs: docker-check
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Deploy on Render

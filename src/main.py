@@ -5,13 +5,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import joblib
+import numpy as np
+import onnxruntime as ort
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 
-# Dictionnaire global pour stocker le pipeline
+# Dictionnaire global pour stocker la session ONNX
 ml_models: Dict[str, Any] = {}
 
 # --- CONFIGURATION DU LOGGING POUR EVIDENTLY / MONITORING ---
@@ -33,11 +34,11 @@ def log_prediction(payload: Dict[str, Any]):
 # --- GESTION DU CYCLE DE VIE (LIFESPAN) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Charge le pipeline ML au démarrage et libère la mémoire à l'arrêt."""
+    """Charge le modèle ONNX au démarrage et libère la mémoire à l'arrêt."""
     candidate_paths = [
-        PROJECT_ROOT / "models" / "best_pipeline_xgboost_epure.pkl",
-        PROJECT_ROOT / "models" / "best_pipeline_production.joblib",
-        PROJECT_ROOT / "artifacts" / "best_model_pipeline.joblib",
+        PROJECT_ROOT / "models" / "best_pipeline_xgboost.onnx",
+        PROJECT_ROOT / "models" / "model_xgboost.onnx",
+        PROJECT_ROOT / "artifacts" / "model.onnx",
     ]
 
     model_path = None
@@ -48,24 +49,31 @@ async def lifespan(app: FastAPI):
 
     if not model_path:
         raise FileNotFoundError(
-            f"Aucun artefact de modèle trouvé parmi : {[str(p) for p in candidate_paths]}"
+            f"Aucun artefact ONNX trouvé parmi : {[str(p) for p in candidate_paths]}"
         )
 
-    print(f"🔄 Chargement du pipeline ML depuis : {model_path}")
-    ml_models["pipeline"] = joblib.load(model_path)
-    print("✅ Pipeline ML chargé avec succès et prêt pour l'inférence !")
+    print(f"🔄 Chargement de la session ONNX Runtime depuis : {model_path}")
+    
+    # Chargement d'ONNX Runtime avec CPU execution provider
+    session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+    
+    ml_models["onnx_session"] = session
+    ml_models["input_names"] = [inp.name for inp in session.get_inputs()]
+    ml_models["output_names"] = [out.name for out in session.get_outputs()]
+    
+    print("✅ Modèle ONNX chargé avec succès et prêt pour l'inférence ultra-rapide !")
 
     yield
 
     ml_models.clear()
-    print("🧹 Ressources du modèle libérées.")
+    print("🧹 Ressources ONNX libérées.")
 
 
 # --- INITIALISATION DE L'APPLICATION FASTAPI ---
 app = FastAPI(
-    title="API de Scoring Client (Projet Morel)",
-    description="API MLOps d'inférence basée sur les 20 features réelles du modèle.",
-    version="2.0.0",
+    title="API de Scoring Client (Projet Morel - ONNX Runtime)",
+    description="API MLOps haute performance optimisée avec ONNX Runtime.",
+    version="2.1.0",
     lifespan=lifespan,
 )
 
@@ -151,17 +159,17 @@ class PredictionResponse(BaseModel):
 # --- ENDPOINTS ---
 @app.get("/", tags=["Général"])
 def read_root():
-    return {"message": "Bienvenue sur l'API de Scoring Client. Rendez-vous sur /docs."}
+    return {"message": "Bienvenue sur l'API de Scoring Client (ONNX Runtime). Rendez-vous sur /docs."}
 
 
 @app.get("/health", tags=["Monitoring"])
 def health_check():
-    if "pipeline" not in ml_models:
+    if "onnx_session" not in ml_models:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Le modèle ML n'est pas encore chargé.",
+            detail="Le modèle ONNX n'est pas chargé.",
         )
-    return {"status": "healthy", "model_loaded": True}
+    return {"status": "healthy", "engine": "onnxruntime", "model_loaded": True}
 
 
 @app.post("/predict", response_model=PredictionResponse, tags=["Machine Learning"])
@@ -169,29 +177,71 @@ def predict(data: ClientData):
     start_time = time.perf_counter()
     timestamp = datetime.now(timezone.utc).isoformat()
 
-    pipeline = ml_models.get("pipeline")
-    if not pipeline:
+    session: ort.InferenceSession = ml_models.get("onnx_session")
+    if not session:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Le modèle n'est pas initialisé.",
+            detail="La session ONNX n'est pas initialisée.",
         )
 
     input_dict = data.model_dump(by_alias=True)
 
     try:
+        # Preparation de l'input pour ONNX Runtime
         input_df = pd.DataFrame([input_dict])
+        
+        # S'assurer que les types booléens et numériques sont correctement transtypés pour ONNX
+        # N.B. Si ton export ONNX attend un unique array float32
+        inputs_onnx = {}
+        input_inputs = session.get_inputs()
+        
+        # Cas 1 : Modèle ONNX qui attend une matrice unique (float32)
+        if len(input_inputs) == 1 and input_inputs[0].type == "tensor(float)":
+            # Conversion en numpy array float32
+            numeric_df = input_df.copy()
+            # Encodage binaire/numérique basique si nécessaire
+            for col in numeric_df.columns:
+                if numeric_df[col].dtype == "bool":
+                    numeric_df[col] = numeric_df[col].astype(np.float32)
+                elif numeric_df[col].dtype == "object":
+                    numeric_df[col] = pd.to_numeric(numeric_df[col], errors="coerce").fillna(0.0)
+            
+            arr = numeric_df.to_numpy().astype(np.float32)
+            inputs_onnx[input_inputs[0].name] = arr
+            
+        # Cas 2 : Pipeline ONNX complet conservant les noms de colonnes / types
+        else:
+            for inp in input_inputs:
+                col_name = inp.name
+                if col_name in input_df:
+                    val = input_df[col_name].values
+                    if "float" in inp.type:
+                        val = val.astype(np.float32)
+                    elif "int64" in inp.type:
+                        val = val.astype(np.int64)
+                    elif "string" in inp.type:
+                        val = val.astype(str)
+                    inputs_onnx[col_name] = val.reshape(-1, 1)
 
-        cat_cols = ["clp_contrat_ap_stat", "division"]
-        for col in cat_cols:
-            if col in input_df.columns:
-                input_df[col] = input_df[col].astype("category")
+        # Inférence ONNX
+        outputs = session.run(None, inputs_onnx)
 
-        prediction = int(pipeline.predict(input_df)[0])
-
-        probability = None
-        if hasattr(pipeline, "predict_proba"):
-            proba_array = pipeline.predict_proba(input_df)
-            probability = float(proba_array[0][1])
+        # Extraction de la prédiction et des probabilités
+        # ONNX pour classifieurs renvoie généralement [label_array, probabilities_map/array]
+        if len(outputs) >= 2:
+            prediction = int(outputs[0][0])
+            raw_proba = outputs[1]
+            
+            # Format dictionnaire [{'0': p0, '1': p1}] ou matrice [[p0, p1]]
+            if isinstance(raw_proba, list) and isinstance(raw_proba[0], dict):
+                probability = float(raw_proba[0].get(1, raw_proba[0].get("1", 0.0)))
+            elif isinstance(raw_proba, np.ndarray):
+                probability = float(raw_proba[0][1])
+            else:
+                probability = float(outputs[1][0])
+        else:
+            prediction = int(outputs[0][0])
+            probability = float(outputs[0][0])
 
         execution_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
@@ -201,6 +251,7 @@ def predict(data: ClientData):
             "prediction": prediction,
             "probability": probability,
             "latency_ms": execution_time_ms,
+            "engine": "onnxruntime",
             "status": "success",
         }
         log_prediction(log_entry)
@@ -216,11 +267,12 @@ def predict(data: ClientData):
             "inputs": input_dict,
             "error": str(e),
             "latency_ms": execution_time_ms,
+            "engine": "onnxruntime",
             "status": "error",
         }
         log_prediction(log_entry)
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Erreur lors de la prédiction : {str(e)}",
+            detail=f"Erreur lors de l'inférence ONNX : {str(e)}",
         )
