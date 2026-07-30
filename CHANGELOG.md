@@ -10,11 +10,11 @@ et ce projet adhère au versionnage sémantique.
 ## [1.0.0] - 2026-07-30
 
 ### 🚀 Added
-* **Monitoring & Data Drift (Étape 3) :** 
+* **Monitoring & Data Drift :** 
   * Création des scripts de monitoring et intégration de la détection de dérive des données (`data_drift_report`).
   * Conversion et fusion du script `analyze_datadrift.py` dans le notebook combiné `01_data_drift_analysis.ipynb` (`b4e4b2b`).
   * Mise en place de la capture de la latence de l'API via un middleware dédié dans FastAPI (`4bcf26b`).
-* **Optimisation & Inférence (Étape 4) :**
+* **Optimisation & Inférence :**
   * Profiling de code, conversion des modèles au format ONNX et optimisation avec génération de rapports (`756e3ec`).
 * **CI/CD & DevOps :**
   * Configuration du pipeline GitHub Actions (`.github/workflows/ci-cd.yml`) avec gestion sécurisée des secrets (`4bcf26b`, `e391243`).
@@ -32,6 +32,6 @@ et ce projet adhère au versionnage sémantique.
   * Mise à jour régulière et affinement du `.gitignore` pour exclure les artefacts de logs, virtenvs et dossiers inutiles (`11658b3`, `7d021a7`, `9ae3011`).
   * Suppression des scripts obsolètes et centralisation dans l'architecture finale.
 
-### 🏁 Initial (Étape 1 & 2)
+### 🏁 Initial
 * Initialisation du dépôt Git (`56d0ca4`).
 * Construction initiale des notebooks d'analyse, préparation des données et premier squelette de l'API REST (`73406d8`).
