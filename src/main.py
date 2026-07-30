@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # Dictionnaire global pour stocker la session ONNX
 ml_models: Dict[str, Any] = {}
 
-# --- CONFIGURATION DU LOGGING POUR EVIDENTLY / MONITORING ---
+# --- CONFIGURATION DU LOGGING POUR MONITORING / EVIDENTLY ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOGS_DIR = PROJECT_ROOT / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -53,15 +53,15 @@ async def lifespan(app: FastAPI):
         )
 
     print(f"🔄 Chargement de la session ONNX Runtime depuis : {model_path}")
-    
-    # Chargement d'ONNX Runtime avec CPU execution provider
+
+    # Chargement d'ONNX Runtime avec le provider CPU
     session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
-    
+
     ml_models["onnx_session"] = session
     ml_models["input_names"] = [inp.name for inp in session.get_inputs()]
     ml_models["output_names"] = [out.name for out in session.get_outputs()]
-    
-    print("✅ Modèle ONNX chargé avec succès et prêt pour l'inférence ultra-rapide !")
+
+    print("✅ Modèle ONNX chargé avec succès et prêt pour l'inférence !")
 
     yield
 
@@ -88,7 +88,7 @@ app.add_middleware(
 )
 
 
-# --- MIDDLEWARE : MESURE DE LATENCE ET EN-TÊTE HTTP ---
+# --- MIDDLEWARE : MESURE DE LATENCE ---
 @app.middleware("http")
 async def add_process_time_header(request: Request, call_next):
     start_time = time.perf_counter()
@@ -187,29 +187,33 @@ def predict(data: ClientData):
     input_dict = data.model_dump(by_alias=True)
 
     try:
-        # Preparation de l'input pour ONNX Runtime
         input_df = pd.DataFrame([input_dict])
-        
-        # S'assurer que les types booléens et numériques sont correctement transtypés pour ONNX
-        # N.B. Si ton export ONNX attend un unique array float32
         inputs_onnx = {}
         input_inputs = session.get_inputs()
-        
-        # Cas 1 : Modèle ONNX qui attend une matrice unique (float32)
+
+        # Cas 1 : Modèle ONNX qui attend une unique matrice 2D en float32
         if len(input_inputs) == 1 and input_inputs[0].type == "tensor(float)":
-            # Conversion en numpy array float32
             numeric_df = input_df.copy()
-            # Encodage binaire/numérique basique si nécessaire
+
             for col in numeric_df.columns:
                 if numeric_df[col].dtype == "bool":
                     numeric_df[col] = numeric_df[col].astype(np.float32)
                 elif numeric_df[col].dtype == "object":
                     numeric_df[col] = pd.to_numeric(numeric_df[col], errors="coerce").fillna(0.0)
-            
+
             arr = numeric_df.to_numpy().astype(np.float32)
+
+            # Vérification et alignement automatique du nombre de features (ex: 20 -> 50)
+            expected_shape = input_inputs[0].shape
+            if len(expected_shape) > 1 and isinstance(expected_shape[1], int):
+                expected_dim = expected_shape[1]
+                if arr.shape[1] < expected_dim:
+                    padding = np.zeros((arr.shape[0], expected_dim - arr.shape[1]), dtype=np.float32)
+                    arr = np.hstack([arr, padding])
+
             inputs_onnx[input_inputs[0].name] = arr
-            
-        # Cas 2 : Pipeline ONNX complet conservant les noms de colonnes / types
+
+        # Cas 2 : Pipeline ONNX complet (entrée multi-colonnes / multi-types)
         else:
             for inp in input_inputs:
                 col_name = inp.name
@@ -223,16 +227,14 @@ def predict(data: ClientData):
                         val = val.astype(str)
                     inputs_onnx[col_name] = val.reshape(-1, 1)
 
-        # Inférence ONNX
+        # Inférence ONNX Runtime
         outputs = session.run(None, inputs_onnx)
 
-        # Extraction de la prédiction et des probabilités
-        # ONNX pour classifieurs renvoie généralement [label_array, probabilities_map/array]
+        # Extraction de la prédiction et de la probabilité
         if len(outputs) >= 2:
             prediction = int(outputs[0][0])
             raw_proba = outputs[1]
-            
-            # Format dictionnaire [{'0': p0, '1': p1}] ou matrice [[p0, p1]]
+
             if isinstance(raw_proba, list) and isinstance(raw_proba[0], dict):
                 probability = float(raw_proba[0].get(1, raw_proba[0].get("1", 0.0)))
             elif isinstance(raw_proba, np.ndarray):
