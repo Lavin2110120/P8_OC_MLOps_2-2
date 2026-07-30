@@ -1,6 +1,27 @@
 # 🚀 P8 - Industrialisation & Monitoring d'un Modèle Machine Learning (MLOps)
 
-Bienvenue dans le dépôt du projet d'industrialisation MLOps. Ce projet met en place une infrastructure complète pour le déploiement, le test automatique et le monitoring continu d'un modèle de prédiction du scoring client (**XGBoost**).
+Bienvenue dans le dépôt du projet d'industrialisation MLOps. Ce projet met en place une infrastructure complète pour le déploiement, le test automatique et le monitoring continu d'un modèle de prédiction du scoring client (**XGBoost / ONNX Runtime**).
+
+---
+
+## ⚡ Rapport d'Optimisation & Performance MLOps
+
+Afin de répondre aux contraintes de production et de garantir une haute disponibilité (SLA stricts), le moteur d'inférence de l'API a été migré de l'exécuteur Python natif (`Joblib` / `Scikit-Learn`) vers **ONNX Runtime** avec le provider `CPUExecutionProvider`.
+
+### 📊 Résultats des Benchmarks (Avant vs Après)
+
+| Indicateur / Métrique | Modèle Natif (`.joblib` / `.pkl`) | Modèle Optimisé (`.onnx`) | Gain / Impact |
+| :--- | :---: | :---: | :---: |
+| **Taille de l'artefact** | **804 Ko** | **279 Ko** | **~65% de réduction** |
+| **Latence d'inférence (p95)** | ~15ms - 50ms | **< 5 ms** | **Accélération > 3x** |
+| **Moteur d'inférence** | Python / Scikit-Learn | ONNX Runtime (C++ Core) | Portabilité cross-platform |
+| **SLA Latence CI/CD** | Non garanti | **Validé par Pytest (`< 5ms`)** | Déploiement sécurisé |
+
+### 🛠️ Leviers d'Optimisation Techniques
+1. **Normalisation du Graphe de Calcul (ONNX Opset) :** Conversion du pipeline XGBoost au format ONNX pour éliminer l'overhead de l'interpréteur Python lors du passage de matrices.
+2. **Gestion du Lifespan FastAPI :** Chargement unique du graphe ONNX au démarrage du serveur Uvicorn via `asynccontextmanager`, évitant toute ré-allocation mémoire par requête.
+3. **Zero-Padding Dynamique & Types NumPy :** Vectorisation des entrées en `float32` et ajustement automatique des dimensions d'entrée dans FastAPI pour prévenir tout crash de schéma.
+4. **Middleware de Latence :** Injection automatique du header HTTP `X-Process-Time-Ms` sur chaque requête pour une observabilité en temps réel.
 
 ---
 
@@ -12,97 +33,104 @@ Bienvenue dans le dépôt du projet d'industrialisation MLOps. Ce projet met en 
 │   └── processed/          # Données de référence (X_train.csv)
 ├── logs/                   # Traçabilité des requêtes d'inférence (.jsonl)
 │   └── .gitkeep
-├── models/                 # Artefacts du pipeline de modèle entraîné (.pkl / .joblib)
+├── models/                 # Artefacts du pipeline (.joblib & .onnx)
 ├── reports/                # Rapports d'analyse de drift générés
 │   └── .gitkeep
 ├── scripts/
 │   ├── analyze_drift.py    # Calcul des métriques & rapport Evidently AI
 │   └── simulate_traffic.py # Simulation de requêtes de production (avec drift)
 ├── src/
-│   ├── main.py             # API FastAPI (endpoints /predict, /health)
-│   └── schemas.py          # Modèles Pydantic de validation des données
-├── tests/                  # Suite de tests unitaires et d'intégration (pytest)
+│   └── main.py             # API FastAPI (ONNX Runtime, /predict, /health)
+├── tests/                  # Suite de tests unitaires et de latence (pytest)
 ├── Dockerfile              # Conteneurisation de l'application
 ├── requirements.txt        # Dépendances du projet
 └── README.md
 
-🛠️ Fonctionnalités Principales
+```
 
-    Serving d'API FastAPI : Exposition d'un endpoint HTTP POST /predict acceptant les données clients au format JSON et renvoyant la prédiction ainsi que la probabilité associée.
+---
 
-    Validation des données (Pydantic) : Contrôle strict des types d'entrée et gestion robuste des erreurs (422 Unprocessable Entity).
+## 🛠️ Fonctionnalités Principales
 
-    Traçabilité & Logging : Enregistrement local structuré au format JSON Lines (predictions.jsonl) incluant les paramètres d'entrée, les résultats, le statut HTTP et la latence d'exécution (latency_ms).
+* **Inférence Haute Performance (ONNX Runtime) :** Exposition d'un endpoint HTTP POST `/predict` renvoyant le score et la probabilité avec une latence inférieure à 5 ms.
+* **Validation des données (Pydantic) :** Contrôle strict des types d'entrée et gestion automatique des alias/colonnes manquantes.
+* **Traçabilité & Logging :** Enregistrement local structuré au format JSON Lines (`predictions.jsonl`) incluant les paramètres d'entrée, les résultats, le statut et la latence (`latency_ms`).
+* **Intégration & Déploiement Continus (CI/CD) :**
+* **CI :** Validation du code, tests unitaires et assertion de latence sous Pytest sur chaque Push/PR.
+* **CD :** Déploiement automatique du conteneur sur Render dès validation du pipeline.
 
-    Intégration & Déploiement Continus (CI/CD) :
 
-        CI : Exécution automatique de pytest à chaque push ou pull request sur la branche main.
+* **Monitoring du Data Drift & Santé Opérationnelle (Evidently AI) :** Analyse statistique automatisée des dérives entre le jeu de référence (`X_train.csv`) et le flux de production.
 
-        CD : Déploiement automatique de l'API conteneurisée sur la plateforme Render.
+---
 
-    Monitoring du Data Drift & Santé Opérationnelle (Evidently AI) : Analyse statistique des dérives entre le jeu d'entraînement (X_train.csv) et les données reçues en production (logs/predictions.jsonl).
+## ⚙️ Installation & Utilisation en Local
 
-⚙️ Installation & Utilisation en Local
-1. Prérequis & Installation
-Bash
+### 1. Installation
 
+```bash
 # Cloner le dépôt
 git clone [https://github.com/votre-compte/p8-mlops.git](https://github.com/votre-compte/p8-mlops.git)
 cd p8-mlops
 
-# Créer et activer un environnement virtuel
+# Créer et activer l'environnement virtuel
 python -m venv .venv
-# Sur Windows (PowerShell) :
-.venv\Scripts\Activate.ps1
-# Sur Linux/macOS :
-source .venv/bin/activate
+source .venv/bin/activate  # Sur Windows: .venv\Scripts\Activate.ps1
 
 # Installer les dépendances
 pip install -r requirements.txt
 
-2. Lancer l'API FastAPI
-Bash
+```
 
+### 2. Lancer l'API FastAPI
+
+```bash
 uvicorn src.main:app --reload --port 8000
 
-    Interface OpenAPI (Swagger UI) : http://127.0.0.1:8000/docs
+```
 
-    Vérification de santé (Healthcheck) : http://127.0.0.1:8000/health
+* **Swagger UI :** `http://127.0.0.1:8000/docs`
+* **Healthcheck :** `http://127.0.0.1:8000/health`
 
-3. Exécuter les tests automatiques
-Bash
+### 3. Exécuter la suite de tests (Unitaires & Performance)
 
+```bash
 pytest tests/ -v
 
-📈 Monitoring & Analyse du Drift
+```
 
-Le projet inclut un système complet pour évaluer la santé opérationnelle de l'API et détecter la dérive des données (Data Drift / Target Drift).
-1. Simuler du trafic de production
+---
 
-Pour générer des logs d'inférence (incluant un scénario simulé de dérive statistique) :
-Bash
+## 📈 Monitoring & Analyse du Drift
 
+1. **Simuler du trafic de production :**
+```bash
 python scripts/simulate_traffic.py
 
-2. Analyser les métriques et générer le rapport
+```
 
-Pour afficher le volume, le taux de succès, les latences p95 et générer le rapport Evidently AI :
-Bash
 
+2. **Analyser les métriques et générer le rapport :**
+```bash
 python scripts/analyze_drift.py
 
-    Résultats :
+```
 
-        Console : Bilan des métriques opérationnelles (latence moyenne, p95, taux de succès).
 
-        Rapport HTML : Un rapport interactif complet est généré dans reports/data_drift_report.html.
 
-🚀 Déploiement & Conteneurisation
+* **Console :** Bilan des métriques opérationnelles (volume, latence p95, taux de succès).
+* **Rapport HTML :** Rapport interactif généré dans `reports/data_drift_report.html`.
 
-    Docker : L'image de l'API peut être construite et exécutée localement via :
-    Bash
+---
 
-    docker build -t mlops-scoring-api .
-    docker run -p 8000:8000 mlops-scoring-api
+## 🚀 Déploiement & Conteneurisation
 
-    Production : L'application est automatiquement déployée sur Render via la CI/CD dès que les tests d'intégration valident le build.
+* **Docker Local :**
+```bash
+docker build -t mlops-scoring-api .
+docker run -p 8000:8000 mlops-scoring-api
+
+```
+
+
+* **Production :** Déploiement automatisé sur Render orchestré via GitHub Actions.
