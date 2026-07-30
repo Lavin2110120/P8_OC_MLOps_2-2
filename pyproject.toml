@@ -25,7 +25,7 @@ dependencies = [
     # Experiment Tracking & MLOPs
     "mlflow >= 2.10.0",
     "sqlalchemy >= 2.0.0",
-    "evidently >= 0.4.0",
+    "evidently >= 0.4.0, < 0.7.0",
 
     # API Web (FastAPI)
     "fastapi >= 0.109.0",
