@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
 # Dictionnaire global pour stocker le pipeline (chargé une seule fois au démarrage)
@@ -72,6 +72,26 @@ app = FastAPI(
     version="2.0.0",
     lifespan=lifespan,
 )
+
+
+# --- MIDDLEWARE : MESURE DE LATENCE ET EN-TÊTE HTTP ---
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    """
+    Intercepte toutes les requêtes HTTP, calcule leur temps d'exécution
+    et injecte la latence (ms) dans l'en-tête de réponse 'X-Process-Time-Ms'.
+    """
+    start_time = time.perf_counter()
+
+    # Traitement de la requête par FastAPI
+    response = await call_next(request)
+
+    # Calcul de la latence globale de la requête
+    process_time_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+    # Ajout du temps dans les headers HTTP de réponse
+    response.headers["X-Process-Time-Ms"] = str(process_time_ms)
+    return response
 
 
 # --- SCHÉMAS PYDANTIC (VALIDATION DES DONNÉES) ---
@@ -206,7 +226,7 @@ def health_check():
     is_model_loaded = "pipeline" in ml_models
     if not is_model_loaded:
         raise HTTPException(
-            status_code=status.HTTP_530_SERVICE_UNAVAILABLE,
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Le modèle ML n'est pas encore chargé.",
         )
     return {"status": "healthy", "model_loaded": True}

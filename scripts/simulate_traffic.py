@@ -5,7 +5,7 @@ from typing import Dict, Any
 import requests
 
 # 🌐 URL de ton API déployée sur Render (ou http://127.0.0.1:8000 pour des tests locaux)
-API_URL = os.getenv("API_URL", "https://ton-application.onrender.com/predict")
+API_URL = os.getenv("API_URL", "http://127.0.0.1:8000/predict")
 
 # 📊 Payload de base conforme au schéma ClientData
 BASE_PAYLOAD: Dict[str, Any] = {
@@ -118,4 +118,4 @@ def run_simulation(num_requests: int = 50, delay_seconds: float = 0.5):
 
 if __name__ == "__main__":
     # Ajuste le nombre de requêtes souhaité
-    run_simulation(num_requests=30, delay_seconds=0.3)
+    run_simulation(num_requests=200, delay_seconds=0.3)
