@@ -184,6 +184,22 @@ class PredictionResponse(BaseModel):
 def read_root():
     return {"message": "Bienvenue sur l'API de Scoring Client (ONNX Runtime). Rendez-vous sur /docs."}
 
+@app.get("/debug/schema", tags=["Général"])
+async def debug_schema():
+    session: ort.InferenceSession = ml_models.get("onnx_session")
+    if not session:
+        raise HTTPException(status_code=500, detail="Session ONNX non initialisée.")
+    return {
+        "inputs": [
+            {"name": inp.name, "type": inp.type, "shape": inp.shape}
+            for inp in session.get_inputs()
+        ],
+        "outputs": [
+            {"name": out.name, "type": out.type, "shape": out.shape}
+            for out in session.get_outputs()
+        ],
+    }
+
 @app.get("/health", tags=["Général"])
 async def health_check():
     session = ml_models.get("onnx_session")
@@ -215,7 +231,7 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
         inputs_onnx = {}
         input_inputs = session.get_inputs()
 
-        # Cas 1 : Modèle ONNX qui attend une unique matrice 2D (ex: XGBoost sans pipeline d'encodage ONNX)
+        # Cas 1 : Modèle ONNX qui attend une unique matrice 2D
         if len(input_inputs) == 1 and input_inputs[0].type == "tensor(float)":
             numeric_df = input_df.copy()
 
@@ -223,11 +239,8 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
                 if numeric_df[col].dtype == "bool":
                     numeric_df[col] = numeric_df[col].astype(np.float32)
                 elif numeric_df[col].dtype == "object":
-                    # ✅ CORRECTION : Si la colonne contient des chaînes non numériques (ex: 'STAT_01'), 
-                    # on tente la conversion numérique, sinon on convertit les catégories en codes/hashs
                     converted = pd.to_numeric(numeric_df[col], errors="coerce")
                     if converted.isna().all() and numeric_df[col].notna().any():
-                        # Factorisation automatique si c'est du texte pur (ex: 'STAT_01' -> 0)
                         numeric_df[col] = pd.factorize(numeric_df[col])[0].astype(np.float32)
                     else:
                         numeric_df[col] = converted.fillna(0.0).astype(np.float32)
@@ -243,20 +256,31 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
 
             inputs_onnx[input_inputs[0].name] = arr
 
-        # Cas 2 : Pipeline ONNX complet (avec gestion native des types textuels/string)
+        # Cas 2 : Pipeline ONNX complet avec inputs nommés
         else:
             for inp in input_inputs:
                 col_name = inp.name
                 if col_name in input_df:
                     val = input_df[col_name].values
                     if "float" in inp.type:
-                        val = pd.to_numeric(val, errors="coerce").fillna(0.0).astype(np.float32)
+                        numeric_val = pd.to_numeric(val, errors="coerce")
+                        if pd.isna(numeric_val).all() and pd.notna(val).any():
+                            val = pd.factorize(val)[0].astype(np.float32)
+                        else:
+                            val = np.nan_to_num(numeric_val.astype(np.float32), nan=0.0)
                     elif "int" in inp.type:
                         val = pd.to_numeric(val, errors="coerce").fillna(0).astype(np.int64)
                     elif "string" in inp.type:
                         val = val.astype(str)
-                    
+                    else:
+                        val = val.astype(str)
+
                     inputs_onnx[col_name] = val.reshape(-1, 1)
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Colonne attendue par le modèle absente du payload : '{col_name}'",
+                    )
 
         # Inférence ONNX Runtime sur Worker Thread
         outputs = await asyncio.to_thread(session.run, None, inputs_onnx)
@@ -286,7 +310,7 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             "engine": "onnxruntime",
             "status": "success",
         }
-        
+
         background_tasks.add_task(log_prediction, log_entry)
         background_tasks.add_task(log_prediction_to_db, log_entry)
 
@@ -304,7 +328,7 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             "engine": "onnxruntime",
             "status": "error",
         }
-        
+
         background_tasks.add_task(log_prediction, log_entry)
         background_tasks.add_task(log_prediction_to_db, log_entry)
 

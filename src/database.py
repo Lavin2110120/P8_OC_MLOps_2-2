@@ -4,10 +4,7 @@ from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
 
 # URL de connexion PostgreSQL (Driver asyncpg)
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql+asyncpg://p8_db_ba6y_user:xPkdpcurgzpMopfxc8JRAnvEspmurHib@dpg-d9q6o5lbedkc73b78mtg-a.frankfurt-postgres.render.com/p8_db_ba6y?ssl=require"
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Engine asynchrone avec NullPool (idéal pour la compatibilité asyncio/pytest et conteneurs)
 engine = create_async_engine(
