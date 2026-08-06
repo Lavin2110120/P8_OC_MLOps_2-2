@@ -57,6 +57,7 @@ dependencies = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests", "test"]
+markers = ["performance: marqueurs pour les tests de performance de latence et charge"]
 
 [build-system]
 requires = ["setuptools>=61.0"]

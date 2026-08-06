@@ -12,7 +12,17 @@ from src.database import AsyncSessionLocal
 from src.main import app
 from src.models import PredictionLog
 from test_api import valid_payload
+from sqlalchemy.ext.asyncio import create_async_engine
+from src.database import DATABASE_URL
+from src.models import Base
 
+@pytest.fixture(autouse=True, scope="module")
+async def setup_test_database():
+    """Crée les tables en base de données avant d'exécuter les tests d'intégration."""
+    engine = create_async_engine(DATABASE_URL, echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    await engine.dispose()
 
 @pytest.mark.asyncio
 async def test_postgres_connection():
