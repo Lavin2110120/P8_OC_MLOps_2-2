@@ -5,25 +5,48 @@ on:
     branches: [ main, test ]
 
 jobs:
-  # 1. Tests unitaires et de latence Python
+  # 1. Tests unitaires, d'intégration (PostgreSQL) et de latence
   test:
     name: Run Pytest (Unit & Performance)
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+    # Le conteneur PostgreSQL doit être au niveau du job
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install -e .
 
       - name: Run Pytest
-        run: pytest
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/test_db
+        run: |
+          pytest
 
   # 2. Validation de l'image Docker & Smoke Test du conteneur
   docker-check:
