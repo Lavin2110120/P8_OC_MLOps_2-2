@@ -48,8 +48,8 @@ RUN adduser --disabled-password --gecos "" appuser
 # Copie des bibliothèques installées du builder vers le runtime
 COPY --from=builder /install /usr/local
 
-# Copie du code source (dossier app/) et du dossier models/
-COPY ./app /app/app
+# Copie du code source (dossier src/) et des modèles ONNX
+COPY ./src /app/src
 COPY ./models /app/models
 
 # Structure des logs et attribution des permissions à appuser
@@ -59,5 +59,5 @@ USER appuser
 
 EXPOSE 8000
 
-# Démarrage de l'API avec Uvicorn pointing sur app.main:app
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Démarrage de l'API avec Uvicorn pointant sur src.main:app
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

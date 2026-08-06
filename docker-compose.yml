@@ -30,15 +30,16 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@db:5432/scoring_db
+      - DATABASE_URL=postgresql+asyncpg://p8_db_ba6y_user:xPkdpcurgzpMopfxc8JRAnvEspmurHib@dpg-d9q6o5lbedkc73b78mtg-a.frankfurt-postgres.render.com/p8_db_ba6y?ssl=require
     volumes:
+      - ./src:/app/src
       - ./logs:/app/logs
       - ./models:/app/models
     depends_on:
       db:
         condition: service_healthy
 
-  # --- SERVICE 3 : Admin BDD pgAdmin (Optionnel) ---
+  # --- SERVICE 3 : Admin BDD pgAdmin ---
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: pgadmin_scoring

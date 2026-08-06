@@ -1,20 +1,19 @@
 import os
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 # URL de connexion PostgreSQL (Driver asyncpg)
-# Format : postgresql+asyncpg://<USER>:<PASSWORD>@<HOST>:<PORT>/<DB_NAME>
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/scoring_db"
+    "postgresql+asyncpg://p8_db_ba6y_user:xPkdpcurgzpMopfxc8JRAnvEspmurHib@dpg-d9q6o5lbedkc73b78mtg-a.frankfurt-postgres.render.com/p8_db_ba6y?ssl=require"
 )
 
-# Moteur de connexion asynchrone avec pooling
+# Engine asynchrone avec NullPool (idéal pour la compatibilité asyncio/pytest et conteneurs)
 engine = create_async_engine(
     DATABASE_URL,
-    echo=False,  # Mettre à True en dev si tu veux voir les requêtes SQL générées
-    pool_size=10,
-    max_overflow=20
+    poolclass=NullPool,
+    echo=False
 )
 
 # Fabrique de sessions asynchrones

@@ -44,7 +44,7 @@ jobs:
 
       - name: Run Pytest
         env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/test_db
+          DATABASE_URL: postgresql+asyncpg://p8_db_ba6y_user:xPkdpcurgzpMopfxc8JRAnvEspmurHib@dpg-d9q6o5lbedkc73b78mtg-a.frankfurt-postgres.render.com/p8_db_ba6y?ssl=require
         run: |
           pytest
 
