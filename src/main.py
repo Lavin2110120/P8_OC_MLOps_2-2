@@ -34,24 +34,15 @@ def log_prediction(payload: Dict[str, Any]):
     except Exception as e:
         print(f"⚠️ Erreur lors de l'écriture du log JSONL : {e}")
 
-
 async def log_prediction_to_db(log_data: dict):
-    """Insère un log de prédiction dans PostgreSQL de façon asynchrone."""
     try:
-        async with AsyncSessionLocal() as db:
-            log_entry = PredictionLog(
-                timestamp=datetime.fromisoformat(log_data["timestamp"]),
-                inputs=log_data["inputs"],
-                prediction=log_data.get("prediction", -1),
-                probability=log_data.get("probability"),
-                latency_ms=log_data["latency_ms"],
-                engine=log_data.get("engine", "onnxruntime"),
-                status=log_data.get("status", "success"),
-            )
-            db.add(log_entry)
-            await db.commit()
+        async with AsyncSessionLocal() as session:
+            log_entry = PredictionLog(**log_data)
+            session.add(log_entry)
+            await session.commit()
     except Exception as e:
-        print(f"⚠️ Erreur lors de l'insertion en BDD : {e}")
+        # Évite d'impacter la réponse HTTP si la BDD est indisponible
+        print(f"[Logging DB Warning] Impossible d'enregistrer le log : {e}")
 
 
 # --- GESTION DU CYCLE DE VIE (LIFESPAN) ---
@@ -191,15 +182,17 @@ class PredictionResponse(BaseModel):
 def read_root():
     return {"message": "Bienvenue sur l'API de Scoring Client (ONNX Runtime). Rendez-vous sur /docs."}
 
+@app.get("/health", tags=["Général"])
+async def health_check():
+    # Vérification dynamique de la présence du modèle dans le dictionnaire ml_models
+    session = ml_models.get("onnx_session")
+    is_loaded = session is not None
 
-@app.get("/health", tags=["Monitoring"])
-def health_check():
-    if "onnx_session" not in ml_models:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Le modèle ONNX n'est pas chargé.",
-        )
-    return {"status": "healthy", "engine": "onnxruntime", "model_loaded": True}
+    return {
+        "status": "healthy" if is_loaded else "unhealthy",
+        "engine": "onnxruntime",
+        "model_loaded": is_loaded,
+    }
 
 
 @app.post("/predict", response_model=PredictionResponse, tags=["Machine Learning"])

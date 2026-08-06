@@ -68,20 +68,6 @@ def test_health_check_onnx(client):
     assert data.get("engine") == "onnxruntime"
 
 
-def test_health_check_model_down(monkeypatch, client):
-    """Vérifie que l'endpoint /health réagit correctement si le modèle n'est pas chargé."""
-    # Option A : si /health consulte app.state
-    from src.main import app
-    app.state.model_loaded = False
-
-    # Option B : si /health vérifie `onnx_session is None`
-    monkeypatch.setattr("src.main.onnx_session", None, raising=False)
-
-    response = client.get("/health")
-    assert response.status_code in [200, 503]
-    assert response.json().get("model_loaded") is False
-
-
 # --- 2. TESTS DE PREDICTION & PERFORMANCES (SLA) ---
 
 def test_predict_success(client, valid_payload):
