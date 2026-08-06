@@ -185,19 +185,25 @@ def read_root():
     return {"message": "Bienvenue sur l'API de Scoring Client (ONNX Runtime). Rendez-vous sur /docs."}
 
 @app.get("/debug/schema", tags=["Général"])
-async def debug_schema():
+def get_onnx_schema():
+    """Permet d'inspecter dynamiquement les entrées/sorties du modèle ONNX chargé."""
     session: ort.InferenceSession = ml_models.get("onnx_session")
     if not session:
-        raise HTTPException(status_code=500, detail="Session ONNX non initialisée.")
+        raise HTTPException(status_code=500, detail="Modèle non chargé")
+    
+    inputs_info = [
+        {"name": inp.name, "type": inp.type, "shape": inp.shape}
+        for inp in session.get_inputs()
+    ]
+    outputs_info = [
+        {"name": out.name, "type": out.type, "shape": out.shape}
+        for out in session.get_outputs()
+    ]
+    
     return {
-        "inputs": [
-            {"name": inp.name, "type": inp.type, "shape": inp.shape}
-            for inp in session.get_inputs()
-        ],
-        "outputs": [
-            {"name": out.name, "type": out.type, "shape": out.shape}
-            for out in session.get_outputs()
-        ],
+        "inputs_count": len(inputs_info),
+        "inputs": inputs_info,
+        "outputs": outputs_info
     }
 
 @app.get("/health", tags=["Général"])
