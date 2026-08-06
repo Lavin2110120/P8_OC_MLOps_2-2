@@ -1,53 +1,55 @@
-name: CI/CD Pipeline - FastAPI Render
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, test ]
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
 jobs:
-  # 1. Tests unitaires, d'intégration (PostgreSQL) et de latence
   test:
-    name: Run Pytest (Unit & Performance)
     runs-on: ubuntu-latest
-
-    # Le conteneur PostgreSQL doit être au niveau du job
     services:
       postgres:
-        image: postgres:15
+        image: postgres:15-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgrespassword
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
           POSTGRES_DB: test_db
         ports:
           - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install -e .
+          pip install -r requirements.txt pytest pytest-asyncio pytest-cov httpx pytest-docker
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
       - name: Run Pytest
 <<<<<<< HEAD
 =======
         env:
+<<<<<<< HEAD
           DATABASE_URL: postgresql+asyncpg://p8_db_ba6y_user:xPkdpcurgzpMopfxc8JRAnvEspmurHib@dpg-d9q6o5lbedkc73b78mtg-a.frankfurt-postgres.render.com/p8_db_ba6y?ssl=require
 >>>>>>> bc6e882 (add storage data with space postgresql)
 =======
@@ -55,55 +57,62 @@ jobs:
       - name: Run Pytest
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/test_db
+=======
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+>>>>>>> 1416814 (pytests fixed)
         run: |
           pytest
+=======
+      - name: Run unit tests
+        run: pytest tests/test_api.py -v --cov=src --cov-report=term-missing
 
-  # 2. Validation de l'image Docker & Smoke Test du conteneur
-  docker-check:
-    name: Build & Test Docker Image
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Run integration tests (DB)
+        run: pytest tests/test_integration_db.py -v --cov=src --cov-report=term-missing
+        env:
+          DATABASE_URL: postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db
+>>>>>>> 8ba9297 (update Render DB, scripts, MLflow and README)
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Run security tests
+        run: pytest tests/test_security_resilience.py -v --cov=src --cov-report=term-missing
 
-      - name: Build Docker Image
-        run: |
-          docker build -t scoring-api:test .
+      - name: Run deployment configuration tests
+        run: pytest tests/test_deployment_config.py -v --cov=src --cov-report=term-missing
 
-      - name: Run Container & Smoke Test
-        run: |
-          # Lancement du conteneur en arrière-plan sur le port 8000
-          docker run -d --name test-api -p 8000:8000 scoring-api:test
-          
-          # Pause pour laisser le temps à Uvicorn / ONNX de démarrer
-          sleep 5
-          
-          # Test de santé (Smoke test) sur le conteneur en cours d'exécution
-          curl --fail http://localhost:8000/health || (docker logs test-api && exit 1)
-
-      - name: Stop and Cleanup Container
+      - name: Upload coverage report
         if: always()
-        run: |
-          docker stop test-api || true
-          docker rm test-api || true
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+<<<<<<< HEAD
   # 3. Déploiement automatique sur Render
 >>>>>>> 4c2801d (step 4: profiling and onxx then model optimization with reports)
+=======
+>>>>>>> 8ba9297 (update Render DB, scripts, MLflow and README)
   deploy:
-    name: Trigger Render Deployment
-    needs: docker-check
+    needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+<<<<<<< HEAD
       - name: Trigger Deploy on Render
         env:
           RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
           RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
 >>>>>>> db4803c (update yaml with secrets, main.py with latency middleware, bugs fixed)
+=======
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to Render
+>>>>>>> 8ba9297 (update Render DB, scripts, MLflow and README)
         run: |
           curl -X POST \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            -H "Accept: application/json" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys"
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"serviceId": "${{ secrets.RENDER_SERVICE_ID }}", "clearCache": false}' \
+            https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys

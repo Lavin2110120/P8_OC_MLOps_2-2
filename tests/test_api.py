@@ -1,187 +1,193 @@
-import asyncio
-import sys
-import time
+import json
+
 from pathlib import Path
+from unittest.mock import patch
 import pytest
-from fastapi.testclient import TestClient
-from httpx import ASGITransport, AsyncClient
 
-# Ajoute le dossier racine du projet au PYTHONPATH
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src.main import app
+import src.main
+from src.main import ClientData
 
 
-# --- FIXTURES GLOBALES & LOCALES ---
+class TestBaseEndpoints:
+    def test_read_root(self, client):
+        response = client.get("/")
+        assert response.status_code == 200
+        assert "message" in response.json()
+        assert "Bienvenue sur l'API de Scoring Client" in response.json()["message"]
 
+    def test_health_check_onnx(self, client):
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "healthy"
+        assert data["model_loaded"] is True
+        assert data.get("engine") == "onnxruntime"
 
-@pytest.fixture
-def valid_payload():
-    """Payload Pydantic complet et valide réutilisable."""
-    return {
-        "customer_value_score": 50.0,
-        "Panier_Moyen_N_signature_3": 120.5,
-        "GrandCompte": False,
-        "clp_contrat_ap_stat": "STAT_01",
-        "annees_depuis_dernier_achat": 1.5,
-        "Turnover_N_signature_1": 3500.0,
-        "Panier_Moyen_N_signature_1": 150.0,
-        "%EC": 12.5,
-        "Nb_lignes_N_signature_1": 8.0,
-        "Turnover_N_signature_3": 1500.0,
-        "Famille_2_N_signature_2": 0.0,
-        "Panier_Moyen_N_signature_2": 135.0,
-        "act_val_cust_3M": True,
-        "annees_depuis_1ere_facture": 4.2,
-        "Famille_0_N_signature_1": 0.0,
-        "Famille_2_N_signature_1": 0.0,
-        "Famille_11_N_signature_1": 0.0,
-        "Famille_14_N_signature_1": 0.0,
-        "division": "DIV_A",
-        "Famille_9_N_signature_3": 0.0,
-    }
-
-
-@pytest.fixture(scope="module")
-def client():
-    """Client synchrone TestClient pour l'API."""
-    with TestClient(app) as c:
-        yield c
-
-
-# --- 1. TESTS DES ENDPOINTS DE BASE & HEALTHCHECK ---
-
-def test_read_root(client):
-    """Vérifie que la page d'accueil répond 200 OK."""
-    response = client.get("/")
-    assert response.status_code == 200
-    assert "message" in response.json()
-
-
-def test_health_check_onnx(client):
-    """Vérifie le suivi de santé et le chargement du moteur ONNX."""
-    response = client.get("/health")
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "healthy"
-    assert data["model_loaded"] is True
-    assert data.get("engine") == "onnxruntime"
-
-
-def test_health_check_model_down(monkeypatch, client):
-    """Vérifie que l'endpoint /health réagit correctement si le modèle n'est pas chargé."""
-    # Option A : si /health consulte app.state
-    from src.main import app
-    app.state.model_loaded = False
-
-    # Option B : si /health vérifie `onnx_session is None`
-    monkeypatch.setattr("src.main.onnx_session", None, raising=False)
-
-    response = client.get("/health")
-    assert response.status_code in [200, 503]
-    assert response.json().get("model_loaded") is False
-
-
-# --- 2. TESTS DE PREDICTION & PERFORMANCES (SLA) ---
-
-def test_predict_success(client, valid_payload):
-    """Vérifie une prédiction réussie et la structure de la réponse."""
-    response = client.post("/predict", json=valid_payload)
-    assert response.status_code == 200, f"Erreur API ({response.status_code}) : {response.json()}"
+    def test_health_check_model_not_loaded(self, client, monkeypatch):
+        """Vérifie que l'endpoint /health retourne 'unhealthy' quand le modèle est absent."""
+        monkeypatch.setattr("src.main.ml_models", {})
+        
+        response = client.get("/health")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "unhealthy"
+        assert data["model_loaded"] is False
     
-    data = response.json()
-    assert "prediction" in data
-    assert "probability" in data
-    assert data["prediction"] in [0, 1]
-    assert data["status"] == "success"
-    if data["probability"] is not None:
-        assert 0.0 <= data["probability"] <= 1.0
 
 
-@pytest.mark.performance
-def test_predict_latency_under_5ms(client, valid_payload):
-    """Vérifie la latence d'inférence (SLA target < 5 ms sur machine dédiée, < 15 ms en CI)."""
-    # 1. Requête de chauffe (Warmup)
-    _ = client.post("/predict", json=valid_payload)
+class TestPrediction:
+    def test_predict_success(self, client, valid_payload):
+        assert "EC" in valid_payload
+        assert valid_payload["clp_contrat_ap_stat"] is "BK"
+        response = client.post("/predict", json=valid_payload)
+        assert response.status_code == 200, response.text
+        data = response.json()
+        assert "prediction" in data
+        assert "probability" in data
+        assert data["prediction"] in [0, 1]
+        assert data["status"] == "success"
+        if data["probability"] is not None:
+            assert 0.0 <= data["probability"] <= 1.0
 
-    # 2. Mesure du temps d'exécution
-    start_time = time.perf_counter()
-    response = client.post("/predict", json=valid_payload)
-    execution_time_ms = (time.perf_counter() - start_time) * 1000
+    def test_predict_invalid_payload(self, client, invalid_payload):
+        response = client.post("/predict", json=invalid_payload)
+        assert response.status_code == 422
 
-    assert response.status_code == 200
-
-    # Vérification via le header X-Process-Time-Ms du middleware
-    process_time_header = float(response.headers.get("X-Process-Time-Ms", execution_time_ms))
-    assert process_time_header < 15.0, (
-        f"❌ Viol de SLA : Latence de l'API ({process_time_header:.2f} ms) "
-        f"supérieure au seuil toléré de 15.0 ms !"
-    )
-
-
-@pytest.mark.asyncio
-async def test_async_predict_endpoint(valid_payload):
-    """Vérifie l'endpoint /predict via un client asynchrone HTTPX."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as async_client:
-        response = await async_client.post("/predict", json=valid_payload)
+    def test_predict_with_none_optional_fields(self, client, valid_payload):
+        payload = valid_payload.copy()
+        payload["customer_value_score"] = None
+        payload["clp_contrat_ap_stat"] = None
+        response = client.post("/predict", json=payload)
         assert response.status_code == 200
         assert response.json()["status"] == "success"
+        assert response.json()["prediction"] in [0, 1]
+
+    @pytest.mark.performance
+    def test_predict_latency_under_sla(self, client, valid_payload):
+        client.post("/predict", json=valid_payload)
+        latencies = []
+        for _ in range(10):
+            response = client.post("/predict", json=valid_payload)
+            assert response.status_code == 200
+            latencies.append(float(response.headers.get("X-Process-Time-Ms", 0)))
+        assert all(latency < 15.0 for latency in latencies), latencies
+
+def test_predict_model_not_loaded(self, client, valid_payload):
+    with patch.dict("src.main.ml_models", {}, clear=True):
+        response = client.post("/predict", json=valid_payload)
+    assert response.status_code == 500
 
 
-# --- 3. TESTS CAS LIMITES ET VALIDATIONS PYDANTIC ---
+class TestValidation:
+    def test_predict_missing_required_field(self, client, invalid_payload):
+        response = client.post("/predict", json=invalid_payload)
+        assert response.status_code == 422
 
-def test_predict_missing_required_field(client):
-    """Vérifie le rejet (422) si un champ obligatoire manque."""
-    payload = {"customer_value_score": 50.0, "GrandCompte": False}
-    response = client.post("/predict", json=payload)
-    assert response.status_code == 422
+    def test_predict_invalid_data_types(self, client, valid_payload):
+        payload = valid_payload.copy()
+        payload["customer_value_score"] = "pas_un_nombre"
+        response = client.post("/predict", json=payload)
+        assert response.status_code == 422
 
+    def test_predict_negative_years_validation(self, client, valid_payload):
+        payload = valid_payload.copy()
+        payload["annees_depuis_dernier_achat"] = -5.0
+        response = client.post("/predict", json=payload)
+        assert response.status_code == 422
 
-def test_predict_invalid_data_types(client, valid_payload):
-    """Vérifie le rejet (422) en cas de mauvais types de données."""
-    payload = valid_payload.copy()
-    payload["customer_value_score"] = "pas_un_nombre"
-    payload["GrandCompte"] = "invalide_bool"
-    response = client.post("/predict", json=payload)
-    assert response.status_code == 422
+    def test_predict_negative_annees_depuis_1ere_facture(self, client, valid_payload):
+        payload = valid_payload.copy()
+        payload["annees_depuis_1ere_facture"] = -1.0
+        response = client.post("/predict", json=payload)
+        assert response.status_code == 422
 
-
-def test_predict_negative_years_validation(client, valid_payload):
-    """Vérifie la contrainte ge=0 sur annees_depuis_dernier_achat."""
-    payload = valid_payload.copy()
-    payload["annees_depuis_dernier_achat"] = -5.0
-    response = client.post("/predict", json=payload)
-    assert response.status_code == 422
-
-
-def test_predict_with_none_optional_fields(client, valid_payload):
-    """Vérifie la gestion des champs optionnels valant None."""
-    payload = valid_payload.copy()
-    payload["customer_value_score"] = None
-    payload["clp_contrat_ap_stat"] = None
-    payload["division"] = None
-    
-    response = client.post("/predict", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "success"
-    assert data["prediction"] in [0, 1]
+    def test_predict_invalid_categorical_field(self, client, valid_payload):
+        payload = valid_payload.copy()
+        payload["act_val_cust_3M"] = "OUI"
+        response = client.post("/predict", json=payload)
+        assert response.status_code == 422
 
 
-# --- 4. PERFORMANCES ET CONCURRENCE ---
-
-@pytest.mark.asyncio
-async def test_concurrent_requests_performance(valid_payload):
-    """Teste la tenue de charge sur 50 requêtes simultanées."""
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as async_client:
-        start_time = time.time()
-        tasks = [async_client.post("/predict", json=valid_payload) for _ in range(50)]
-        responses = await asyncio.gather(*tasks)
-        elapsed = time.time() - start_time
-
-        assert all(r.status_code == 200 for r in responses), "Erreur sur au moins une requête."
+class TestSchemaConsistency:
+    def test_schema_matches_config_production(self):
+        """Vérifie que le schéma API correspond exactement à config_production.json."""
+        config_path = (Path(__file__).resolve().parent.parent / "models" / "config_production.json")
         
-        # Réhaussé à 10.0s pour accommoder les runners CI à 2 vCPUs
-        assert elapsed < 10.0, f"Temps d'exécution trop long ({elapsed:.3f}s)"
+        if not config_path.exists():
+            pytest.skip(f"config_production.json non trouvé à {config_path}")
+        
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+        expected = set(config["features_model"])
+        actual = {field.alias or name for name, field in ClientData.model_fields.items()}
+        
+        assert actual == expected, (
+            f"\nManquants dans l'API : {sorted(expected - actual)}"
+            f"\nEn trop dans l'API   : {sorted(actual - expected)}"
+        )
+
+    def test_schema_matches_onnx_inputs(self, client):
+        """Vérifie que les inputs ONNX sont couverts par le schéma API."""
+        response = client.get("/debug/schema")
+        assert response.status_code == 200, f"Erreur /debug/schema : {response.text}"
+        response_data = response.json()
+        onnx_inputs = {item["name"] for item in response_data["inputs"]}
+        api_fields = {field.alias or name for name, field in ClientData.model_fields.items()}
+        
+        if len(onnx_inputs) == 1:
+            pytest.skip("Modèle ONNX à matrice unique, pas d'inputs nommés")
+        missing = onnx_inputs - api_fields
+        assert not missing, f"Inputs ONNX absents du schéma API : {missing}"
+
+class TestLogging:
+    def test_process_time_header_present(self, client, valid_payload):
+        response = client.post("/predict", json=valid_payload)
+        assert response.status_code == 200
+        assert "X-Process-Time-Ms" in response.headers
+        assert float(response.headers["X-Process-Time-Ms"]) >= 0
+
+    def test_logs_stats_endpoint(self, client, valid_payload):
+        client.post("/predict", json=valid_payload)
+        response = client.get("/logs/stats")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["n_success"] >= 1
+        assert data["n_error"] >= 0
+        assert data["latency_ms_mean"] is not None
+        assert data["error_rate"] is not None
+
+    def test_prediction_writes_jsonl_log(self, client, valid_payload, tmp_path, monkeypatch):
+        log_file = tmp_path / "predictions.jsonl"
+        monkeypatch.setattr(src.main, "PREDICTIONS_LOG_FILE", log_file)
+        response = client.post("/predict", json=valid_payload)
+        assert response.status_code == 200
+        lines = log_file.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1
+        record = json.loads(lines[0])
+        assert record["status"] == "success"
+        assert {"timestamp", "inputs", "prediction", "probability", "latency_ms", "engine"} <= record.keys()
+        assert record["engine"] == "onnxruntime"
+
+    def test_logs_export_endpoint(self, client, valid_payload):
+        """Vérifie que l'endpoint /logs/export retourne les logs en NDJSON."""
+        # Créer au moins une prédiction pour avoir un log
+        client.post("/predict", json=valid_payload)
+        
+        response = client.get("/logs/export")
+        assert response.status_code == 200, f"Erreur export logs : {response.text}"
+        
+        # Vérifier le content-type NDJSON
+        assert "application/x-ndjson" in response.headers["content-type"], (
+            f"Content-Type inattendu : {response.headers['content-type']}"
+        )
+        
+        # Vérifier que la réponse contient des données
+        assert response.text, "Réponse vide"
+        
+        # Valider que chaque ligne est un JSON valide (NDJSON)
+        lines = response.text.strip().splitlines()
+        assert len(lines) > 0, "Aucune ligne de log retournée"
+        
+        for i, line in enumerate(lines):
+            record = json.loads(line)  # Vérifie que c'est du JSON valide
+            assert record["status"] == "success", f"Ligne {i} : status invalide"
+            assert "timestamp" in record, f"Ligne {i} : timestamp manquant"

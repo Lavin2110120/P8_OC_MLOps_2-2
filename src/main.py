@@ -4,61 +4,92 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 import onnxruntime as ort
 import pandas as pd
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from fastapi.responses import PlainTextResponse
 
 from src.database import AsyncSessionLocal, Base, engine
 from src.models import PredictionLog
 
-# Dictionnaire global pour stocker la session ONNX
+import os
+import threading
+
+# Dictionnaire global pour stocker la session ONNX et la config de production
 ml_models: Dict[str, Any] = {}
 
 # --- CONFIGURATION DU LOGGING POUR MONITORING / EVIDENTLY ---
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOGS_DIR = PROJECT_ROOT / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
-PREDICTIONS_LOG_FILE = LOGS_DIR / "predictions.jsonl"
+PREDICTIONS_LOG_FILE = Path(os.getenv("PREDICTIONS_LOG_FILE", LOGS_DIR / "predictions.jsonl"))
 
 
-def log_prediction(payload: Dict[str, Any]):
-    """Écrit un enregistrement au format JSON Lines (JSONL) pour le monitoring."""
+_log_lock = threading.Lock()
+
+
+_REQUIRED_SUCCESS_KEYS = ("status", "latency_ms", "inputs", "prediction")
+
+
+def log_prediction(payload: Dict[str, Any]) -> None:
+    """Écrit UN enregistrement JSON compact par ligne (JSONL) pour le monitoring.
+
+    Format contractuel avec le notebook 4 :
+      - 1 ligne = 1 JSON complet (pas de pretty-print, pas de print())
+      - status == "success" => clés "status", "latency_ms", "inputs", "prediction"
+      - status == "error"   => clés "status", "latency_ms", "inputs", "error"
+    """
     try:
-        with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        json_payload = payload.copy()
+        if isinstance(json_payload.get("timestamp"), datetime):
+            json_payload["timestamp"] = json_payload["timestamp"].isoformat()
+
+   
+        if json_payload.get("status") == "success":
+            missing = [k for k in _REQUIRED_SUCCESS_KEYS if k not in json_payload]
+            if missing:
+                print(f"⚠️ Log 'success' incomplet (clés manquantes : {missing}) — non écrit")
+                return
+
+        # Valeurs numpy -> natifs Python (json.dumps plante sur np.int64/np.float32)
+        def _to_native(obj):
+            if isinstance(obj, (np.integer, np.floating)):
+                return obj.item()
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, dict):
+                return {str(k): _to_native(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple)):
+                return [_to_native(v) for v in obj]
+            return obj
+
+        json_payload = _to_native(json_payload)
+
+        with _log_lock:
+            with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
+                f.write(json.dumps(json_payload, ensure_ascii=False) + "\n")
     except Exception as e:
         print(f"⚠️ Erreur lors de l'écriture du log JSONL : {e}")
 
-
 async def log_prediction_to_db(log_data: dict):
-    """Insère un log de prédiction dans PostgreSQL de façon asynchrone."""
     try:
-        async with AsyncSessionLocal() as db:
-            log_entry = PredictionLog(
-                timestamp=datetime.fromisoformat(log_data["timestamp"]),
-                inputs=log_data["inputs"],
-                prediction=log_data.get("prediction", -1),
-                probability=log_data.get("probability"),
-                latency_ms=log_data["latency_ms"],
-                engine=log_data.get("engine", "onnxruntime"),
-                status=log_data.get("status", "success"),
-            )
-            db.add(log_entry)
-            await db.commit()
+        async with AsyncSessionLocal() as session:
+            log_entry = PredictionLog(**log_data)
+            session.add(log_entry)
+            await session.commit()
     except Exception as e:
-        print(f"⚠️ Erreur lors de l'insertion en BDD : {e}")
+        print(f"[Logging DB Warning] Impossible d'enregistrer le log : {e}")
 
 
 # --- GESTION DU CYCLE DE VIE (LIFESPAN) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialise les tables PostgreSQL et charge le modèle ONNX au démarrage."""
-    # Création des tables PostgreSQL si elles n'existent pas
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -130,56 +161,56 @@ async def add_process_time_header(request: Request, call_next):
 
 # --- SCHÉMAS PYDANTIC ---
 class ClientData(BaseModel):
-    customer_value_score: Optional[float] = Field(None, description="Score de valeur client", examples=[50.0])
-    Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3", examples=[120.5])
-    GrandCompte: bool = Field(..., description="Indicateur Grand Compte", examples=[False])
-    clp_contrat_ap_stat: Optional[str] = Field(None, description="Statut contrat AP", examples=["STAT_01"])
-    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat", examples=[1.5])
-    Turnover_N_signature_1: float = Field(..., description="CA signature 1", examples=[3500.0])
-    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1", examples=[150.0])
-    percent_EC: float = Field(..., alias="%EC", description="Pourcentage EC", examples=[12.5])
-    Nb_lignes_N_signature_1: float = Field(..., description="Nb lignes signature 1", examples=[8.0])
-    Turnover_N_signature_3: float = Field(..., description="CA signature 3", examples=[1500.0])
-    Famille_2_N_signature_2: float = Field(..., description="Famille 2 signature 2", examples=[0.0])
-    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2", examples=[135.0])
-    act_val_cust_3M: bool = Field(..., description="Valeur client active 3 mois", examples=[True])
-    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis 1ère facture", examples=[4.2])
-    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1", examples=[0.0])
-    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1", examples=[0.0])
-    Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1", examples=[0.0])
-    Famille_14_N_signature_1: float = Field(..., description="Famille 14 signature 1", examples=[0.0])
-    division: Optional[str] = Field(None, description="Division", examples=["DIV_A"])
-    Famille_9_N_signature_3: float = Field(..., description="Famille 9 signature 3", examples=[0.0])
+    """Données client conformes aux 20 features de production."""
+
+    customer_value_score: Optional[float] = Field(default=None, description="Score de valeur client")
+    clp_contrat_ap_stat: Optional[str] = Field(default=None, description="Statut contrat AP (catégoriel)")
+    act_val_cust_3M: bool = Field(..., description="Valeur client active sur 3 mois")
+    Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3")
+    GrandCompte: bool = Field(..., description="Indicateur grand compte")
+    EC: float = Field(..., description="Pourcentage EC")
+    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2")
+    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis le dernier achat")
+    Turnover_N_signature_3: float = Field(..., description="Turnover signature 3")
+    Turnover_N_signature_1: float = Field(..., description="Turnover signature 1")
+    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1")
+    Famille_10_N_signature_3: float = Field(..., description="Famille 10 signature 3")
+    Famille_1_N_signature_3: float = Field(..., description="Famille 1 signature 3")
+    division: str = Field(..., description="Division (catégoriel)")
+    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1")
+    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis la première facture")
+    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1")
+    Turnover_N_signature_2: float = Field(..., description="Turnover signature 2")
+    Famille_12_N_signature_1: float = Field(..., description="Famille 12 signature 1")
+    Nb_lignes_N_signature_1: float = Field(..., description="Nombre de lignes signature 1")
 
     model_config = ConfigDict(
         populate_by_name=True,
         json_schema_extra={
             "example": {
                 "customer_value_score": 50.0,
+                "clp_contrat_ap_stat": "BK",
+                "act_val_cust_3M": True,
                 "Panier_Moyen_N_signature_3": 120.5,
                 "GrandCompte": False,
-                "clp_contrat_ap_stat": "STAT_01",
-                "annees_depuis_dernier_achat": 1.5,
-                "Turnover_N_signature_1": 3500.0,
-                "Panier_Moyen_N_signature_1": 150.0,
-                "%EC": 12.5,
-                "Nb_lignes_N_signature_1": 8.0,
-                "Turnover_N_signature_3": 1500.0,
-                "Famille_2_N_signature_2": 0.0,
+                "EC": 12.5,
                 "Panier_Moyen_N_signature_2": 135.0,
-                "act_val_cust_3M": True,
-                "annees_depuis_1ere_facture": 4.2,
+                "annees_depuis_dernier_achat": 1.5,
+                "Turnover_N_signature_3": 1500.0,
+                "Turnover_N_signature_1": 3500.0,
                 "Famille_0_N_signature_1": 0.0,
-                "Famille_2_N_signature_1": 0.0,
-                "Famille_11_N_signature_1": 0.0,
-                "Famille_14_N_signature_1": 0.0,
+                "Famille_10_N_signature_3": 0.0,
+                "Famille_1_N_signature_3": 0.0,
                 "division": "DIV_A",
-                "Famille_9_N_signature_3": 0.0,
+                "Famille_2_N_signature_1": 0.0,
+                "annees_depuis_1ere_facture": 4.2,
+                "Panier_Moyen_N_signature_1": 150.0,
+                "Turnover_N_signature_2": 2000.0,
+                "Famille_12_N_signature_1": 0.0,
+                "Nb_lignes_N_signature_1": 8.0,
             }
         },
     )
-
-
 class PredictionResponse(BaseModel):
     prediction: int = Field(..., description="Classe prédite (0 ou 1)")
     probability: Optional[float] = Field(None, description="Probabilité classe 1")
@@ -191,21 +222,44 @@ class PredictionResponse(BaseModel):
 def read_root():
     return {"message": "Bienvenue sur l'API de Scoring Client (ONNX Runtime). Rendez-vous sur /docs."}
 
+@app.get("/debug/schema", tags=["Général"])
+def get_onnx_schema():
+    """Permet d'inspecter dynamiquement les entrées/sorties du modèle ONNX chargé."""
+    session: ort.InferenceSession = ml_models.get("onnx_session")
+    if not session:
+        raise HTTPException(status_code=500, detail="Modèle non chargé")
+    
+    inputs_info = [
+        {"name": inp.name, "type": inp.type, "shape": inp.shape}
+        for inp in session.get_inputs()
+    ]
+    outputs_info = [
+        {"name": out.name, "type": out.type, "shape": out.shape}
+        for out in session.get_outputs()
+    ]
+    
+    return {
+        "inputs_count": len(inputs_info),
+        "inputs": inputs_info,
+        "outputs": outputs_info
+    }
 
-@app.get("/health", tags=["Monitoring"])
-def health_check():
-    if "onnx_session" not in ml_models:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Le modèle ONNX n'est pas chargé.",
-        )
-    return {"status": "healthy", "engine": "onnxruntime", "model_loaded": True}
+@app.get("/health", tags=["Général"])
+async def health_check():
+    session = ml_models.get("onnx_session")
+    is_loaded = session is not None
+
+    return {
+        "status": "healthy" if is_loaded else "unhealthy",
+        "engine": "onnxruntime",
+        "model_loaded": is_loaded,
+    }
 
 
 @app.post("/predict", response_model=PredictionResponse, tags=["Machine Learning"])
 async def predict(data: ClientData, background_tasks: BackgroundTasks):
     start_time = time.perf_counter()
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(timezone.utc)
 
     session: ort.InferenceSession = ml_models.get("onnx_session")
     if not session:
@@ -221,17 +275,23 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
         inputs_onnx = {}
         input_inputs = session.get_inputs()
 
-        # Cas 1 : Modèle ONNX qui attend une unique matrice 2D en float32
+        # Cas 1 : Modèle ONNX qui attend une unique matrice 2D
         if len(input_inputs) == 1 and input_inputs[0].type == "tensor(float)":
             numeric_df = input_df.copy()
 
             for col in numeric_df.columns:
                 if numeric_df[col].dtype == "bool":
                     numeric_df[col] = numeric_df[col].astype(np.float32)
-                elif numeric_df[col].dtype == "object":
-                    numeric_df[col] = pd.to_numeric(numeric_df[col], errors="coerce").fillna(0.0)
+                else:
+                    # Toujours tenter la conversion numérique d'abord
+                    converted = pd.to_numeric(numeric_df[col], errors="coerce")
+                    if converted.notna().all():
+                        numeric_df[col] = converted.astype(np.float32)
+                    else:
+                        # Colonne catégorielle / texte -> factorize
+                        numeric_df[col] = pd.factorize(numeric_df[col].astype(str))[0].astype(np.float32)
 
-            arr = numeric_df.to_numpy().astype(np.float32)
+            arr = numeric_df.to_numpy(dtype=np.float32)  # cast explicite ici, plus sûr que .astype après
 
             expected_shape = input_inputs[0].shape
             if len(expected_shape) > 1 and isinstance(expected_shape[1], int):
@@ -242,19 +302,32 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
 
             inputs_onnx[input_inputs[0].name] = arr
 
-        # Cas 2 : Pipeline ONNX complet (entrée multi-colonnes / multi-types)
+        # Cas 2 : Pipeline ONNX complet avec inputs nommés
         else:
             for inp in input_inputs:
                 col_name = inp.name
                 if col_name in input_df:
                     val = input_df[col_name].values
+                    
                     if "float" in inp.type:
-                        val = val.astype(np.float32)
-                    elif "int64" in inp.type:
-                        val = val.astype(np.int64)
+                        numeric_val = pd.to_numeric(val, errors="coerce")
+                        if pd.isna(numeric_val).all() and pd.notna(val).any():
+                            val = pd.factorize(val)[0].astype(np.float32)
+                        else:
+                            val = np.nan_to_num(numeric_val.astype(np.float32), nan=0.0)
+                    elif "int" in inp.type:
+                        val = pd.to_numeric(val, errors="coerce").fillna(0).astype(np.int64)
                     elif "string" in inp.type:
-                        val = val.astype(str)
+                        val = np.asarray(val, dtype=object).astype(str)
+                    else:
+                        val = np.asarray(val, dtype=object).astype(str)
+                    
                     inputs_onnx[col_name] = val.reshape(-1, 1)
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Colonne attendue par le modèle absente du payload : '{col_name}'",
+                    )
 
         # Inférence ONNX Runtime sur Worker Thread
         outputs = await asyncio.to_thread(session.run, None, inputs_onnx)
@@ -284,8 +357,7 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             "engine": "onnxruntime",
             "status": "success",
         }
-        
-        # Tâches de fond : écriture JSONL + insertion BDD PostgreSQL
+
         background_tasks.add_task(log_prediction, log_entry)
         background_tasks.add_task(log_prediction_to_db, log_entry)
 
@@ -303,8 +375,7 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             "engine": "onnxruntime",
             "status": "error",
         }
-        
-        # Tâches de fond d'erreur : écriture JSONL + insertion BDD PostgreSQL
+
         background_tasks.add_task(log_prediction, log_entry)
         background_tasks.add_task(log_prediction_to_db, log_entry)
 
@@ -312,3 +383,75 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Erreur lors de l'inférence ONNX : {str(e)}",
         )
+
+@app.get("/logs/export", response_class=PlainTextResponse, tags=["Monitoring"])
+def export_prediction_logs(
+    status_filter: Optional[str] = None,
+    limit: Optional[int] = None,
+):
+    """Exporte le journal de prédictions JSONL (pour le monitoring NB4).
+
+    - status_filter : "success" ou "error" pour ne garder qu'un type de record
+    - limit         : ne renvoyer que les N derniers enregistrements
+    """
+    if not PREDICTIONS_LOG_FILE.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aucun log de prédiction disponible pour l'instant.",
+        )
+
+    with _log_lock:  # évite de lire pendant une écriture
+        lines = PREDICTIONS_LOG_FILE.read_text(encoding="utf-8").splitlines()
+
+    # On ne renvoie que les lignes JSON valides : le NB4 n'aura jamais
+    # à gérer de JSONDecodeError sur l'export
+    valid_lines = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if status_filter and rec.get("status") != status_filter:
+            continue
+        valid_lines.append(line)
+
+    if limit is not None and limit > 0:
+        valid_lines = valid_lines[-limit:]
+
+    return PlainTextResponse("\n".join(valid_lines) + "\n", media_type="application/x-ndjson")
+
+@app.get("/logs/stats", tags=["Monitoring"])
+def prediction_logs_stats():
+    """Résumé du journal : volume, taux d'erreur, latence moyenne."""
+    if not PREDICTIONS_LOG_FILE.exists():
+        return {"n_records": 0, "n_success": 0, "n_error": 0}
+
+    with _log_lock:
+        lines = PREDICTIONS_LOG_FILE.read_text(encoding="utf-8").splitlines()
+
+    n_success, n_error, n_corrupt, latencies = 0, 0, 0, []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            n_corrupt += 1
+            continue
+        if rec.get("status") == "success":
+            n_success += 1
+            if "latency_ms" in rec:
+                latencies.append(rec["latency_ms"])
+        else:
+            n_error += 1
+
+    return {
+        "n_records": n_success + n_error,
+        "n_success": n_success,
+        "n_error": n_error,
+        "n_corrupt_lines": n_corrupt,
+        "error_rate": round(n_error / (n_success + n_error), 4) if (n_success + n_error) else None,
+        "latency_ms_mean": round(float(np.mean(latencies)), 2) if latencies else None,
+    }
