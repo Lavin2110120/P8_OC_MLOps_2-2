@@ -29,8 +29,12 @@ PREDICTIONS_LOG_FILE = LOGS_DIR / "predictions.jsonl"
 def log_prediction(payload: Dict[str, Any]):
     """Écrit un enregistrement au format JSON Lines (JSONL) pour le monitoring."""
     try:
+        json_payload = payload.copy()
+        if isinstance(json_payload.get("timestamp"), datetime):
+            json_payload["timestamp"] = json_payload["timestamp"].isoformat()
+
         with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, ensure_ascii=False) + "\n")
+            f.write(json.dumps(json_payload, ensure_ascii=False) + "\n")
     except Exception as e:
         print(f"⚠️ Erreur lors de l'écriture du log JSONL : {e}")
 
@@ -41,7 +45,6 @@ async def log_prediction_to_db(log_data: dict):
             session.add(log_entry)
             await session.commit()
     except Exception as e:
-        # Évite d'impacter la réponse HTTP si la BDD est indisponible
         print(f"[Logging DB Warning] Impossible d'enregistrer le log : {e}")
 
 
@@ -49,7 +52,6 @@ async def log_prediction_to_db(log_data: dict):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialise les tables PostgreSQL et charge le modèle ONNX au démarrage."""
-    # Création des tables PostgreSQL si elles n'existent pas
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -184,7 +186,6 @@ def read_root():
 
 @app.get("/health", tags=["Général"])
 async def health_check():
-    # Vérification dynamique de la présence du modèle dans le dictionnaire ml_models
     session = ml_models.get("onnx_session")
     is_loaded = session is not None
 
@@ -198,7 +199,7 @@ async def health_check():
 @app.post("/predict", response_model=PredictionResponse, tags=["Machine Learning"])
 async def predict(data: ClientData, background_tasks: BackgroundTasks):
     start_time = time.perf_counter()
-    timestamp = datetime.now(timezone.utc).isoformat()
+    timestamp = datetime.now(timezone.utc)
 
     session: ort.InferenceSession = ml_models.get("onnx_session")
     if not session:
@@ -214,7 +215,7 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
         inputs_onnx = {}
         input_inputs = session.get_inputs()
 
-        # Cas 1 : Modèle ONNX qui attend une unique matrice 2D en float32
+        # Cas 1 : Modèle ONNX qui attend une unique matrice 2D (ex: XGBoost sans pipeline d'encodage ONNX)
         if len(input_inputs) == 1 and input_inputs[0].type == "tensor(float)":
             numeric_df = input_df.copy()
 
@@ -222,7 +223,14 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
                 if numeric_df[col].dtype == "bool":
                     numeric_df[col] = numeric_df[col].astype(np.float32)
                 elif numeric_df[col].dtype == "object":
-                    numeric_df[col] = pd.to_numeric(numeric_df[col], errors="coerce").fillna(0.0)
+                    # ✅ CORRECTION : Si la colonne contient des chaînes non numériques (ex: 'STAT_01'), 
+                    # on tente la conversion numérique, sinon on convertit les catégories en codes/hashs
+                    converted = pd.to_numeric(numeric_df[col], errors="coerce")
+                    if converted.isna().all() and numeric_df[col].notna().any():
+                        # Factorisation automatique si c'est du texte pur (ex: 'STAT_01' -> 0)
+                        numeric_df[col] = pd.factorize(numeric_df[col])[0].astype(np.float32)
+                    else:
+                        numeric_df[col] = converted.fillna(0.0).astype(np.float32)
 
             arr = numeric_df.to_numpy().astype(np.float32)
 
@@ -235,18 +243,19 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
 
             inputs_onnx[input_inputs[0].name] = arr
 
-        # Cas 2 : Pipeline ONNX complet (entrée multi-colonnes / multi-types)
+        # Cas 2 : Pipeline ONNX complet (avec gestion native des types textuels/string)
         else:
             for inp in input_inputs:
                 col_name = inp.name
                 if col_name in input_df:
                     val = input_df[col_name].values
                     if "float" in inp.type:
-                        val = val.astype(np.float32)
-                    elif "int64" in inp.type:
-                        val = val.astype(np.int64)
+                        val = pd.to_numeric(val, errors="coerce").fillna(0.0).astype(np.float32)
+                    elif "int" in inp.type:
+                        val = pd.to_numeric(val, errors="coerce").fillna(0).astype(np.int64)
                     elif "string" in inp.type:
                         val = val.astype(str)
+                    
                     inputs_onnx[col_name] = val.reshape(-1, 1)
 
         # Inférence ONNX Runtime sur Worker Thread
@@ -278,7 +287,6 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             "status": "success",
         }
         
-        # Tâches de fond : écriture JSONL + insertion BDD PostgreSQL
         background_tasks.add_task(log_prediction, log_entry)
         background_tasks.add_task(log_prediction_to_db, log_entry)
 
@@ -297,7 +305,6 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             "status": "error",
         }
         
-        # Tâches de fond d'erreur : écriture JSONL + insertion BDD PostgreSQL
         background_tasks.add_task(log_prediction, log_entry)
         background_tasks.add_task(log_prediction_to_db, log_entry)
 
