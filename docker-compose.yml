@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  # --- SERVICE 1 : Base de données PostgreSQL ---
+  db:
+    image: postgres:16-alpine
+    container_name: postgres_scoring_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: scoring_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d scoring_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- SERVICE 2 : API FastAPI (ONNX Runtime) ---
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_scoring_api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgrespassword@db:5432/scoring_db
+    volumes:
+      - ./logs:/app/logs
+      - ./models:/app/models
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # --- SERVICE 3 : Admin BDD pgAdmin (Optionnel) ---
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: pgadmin_scoring
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: adminpassword
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
@@ -8,9 +9,12 @@ from typing import Any, Dict, Optional
 import numpy as np
 import onnxruntime as ort
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
+
+from src.database import AsyncSessionLocal, Base, engine
+from src.models import PredictionLog
 
 # Dictionnaire global pour stocker la session ONNX
 ml_models: Dict[str, Any] = {}
@@ -28,13 +32,40 @@ def log_prediction(payload: Dict[str, Any]):
         with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
             f.write(json.dumps(payload, ensure_ascii=False) + "\n")
     except Exception as e:
-        print(f"⚠️ Erreur lors de l'écriture du log : {e}")
+        print(f"⚠️ Erreur lors de l'écriture du log JSONL : {e}")
+
+
+async def log_prediction_to_db(log_data: dict):
+    """Insère un log de prédiction dans PostgreSQL de façon asynchrone."""
+    try:
+        async with AsyncSessionLocal() as db:
+            log_entry = PredictionLog(
+                timestamp=datetime.fromisoformat(log_data["timestamp"]),
+                inputs=log_data["inputs"],
+                prediction=log_data.get("prediction", -1),
+                probability=log_data.get("probability"),
+                latency_ms=log_data["latency_ms"],
+                engine=log_data.get("engine", "onnxruntime"),
+                status=log_data.get("status", "success"),
+            )
+            db.add(log_entry)
+            await db.commit()
+    except Exception as e:
+        print(f"⚠️ Erreur lors de l'insertion en BDD : {e}")
 
 
 # --- GESTION DU CYCLE DE VIE (LIFESPAN) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Charge le modèle ONNX au démarrage et libère la mémoire à l'arrêt."""
+    """Initialise les tables PostgreSQL et charge le modèle ONNX au démarrage."""
+    # Création des tables PostgreSQL si elles n'existent pas
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("✅ Tables PostgreSQL vérifiées / créées avec succès.")
+    except Exception as e:
+        print(f"⚠️ Avertissement BDD : Impossible de créer les tables : {e}")
+
     candidate_paths = [
         PROJECT_ROOT / "models" / "best_pipeline_xgboost.onnx",
         PROJECT_ROOT / "models" / "model_xgboost.onnx",
@@ -54,7 +85,6 @@ async def lifespan(app: FastAPI):
 
     print(f"🔄 Chargement de la session ONNX Runtime depuis : {model_path}")
 
-    # Chargement d'ONNX Runtime avec le provider CPU
     session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
 
     ml_models["onnx_session"] = session
@@ -173,7 +203,7 @@ def health_check():
 
 
 @app.post("/predict", response_model=PredictionResponse, tags=["Machine Learning"])
-def predict(data: ClientData):
+async def predict(data: ClientData, background_tasks: BackgroundTasks):
     start_time = time.perf_counter()
     timestamp = datetime.now(timezone.utc).isoformat()
 
@@ -203,7 +233,6 @@ def predict(data: ClientData):
 
             arr = numeric_df.to_numpy().astype(np.float32)
 
-            # Vérification et alignement automatique du nombre de features (ex: 20 -> 50)
             expected_shape = input_inputs[0].shape
             if len(expected_shape) > 1 and isinstance(expected_shape[1], int):
                 expected_dim = expected_shape[1]
@@ -227,10 +256,9 @@ def predict(data: ClientData):
                         val = val.astype(str)
                     inputs_onnx[col_name] = val.reshape(-1, 1)
 
-        # Inférence ONNX Runtime
-        outputs = session.run(None, inputs_onnx)
+        # Inférence ONNX Runtime sur Worker Thread
+        outputs = await asyncio.to_thread(session.run, None, inputs_onnx)
 
-        # Extraction de la prédiction et de la probabilité
         if len(outputs) >= 2:
             prediction = int(outputs[0][0])
             raw_proba = outputs[1]
@@ -256,7 +284,10 @@ def predict(data: ClientData):
             "engine": "onnxruntime",
             "status": "success",
         }
-        log_prediction(log_entry)
+        
+        # Tâches de fond : écriture JSONL + insertion BDD PostgreSQL
+        background_tasks.add_task(log_prediction, log_entry)
+        background_tasks.add_task(log_prediction_to_db, log_entry)
 
         return PredictionResponse(
             prediction=prediction, probability=probability, status="success"
@@ -272,7 +303,10 @@ def predict(data: ClientData):
             "engine": "onnxruntime",
             "status": "error",
         }
-        log_prediction(log_entry)
+        
+        # Tâches de fond d'erreur : écriture JSONL + insertion BDD PostgreSQL
+        background_tasks.add_task(log_prediction, log_entry)
+        background_tasks.add_task(log_prediction_to_db, log_entry)
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
