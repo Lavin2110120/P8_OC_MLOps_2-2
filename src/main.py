@@ -126,7 +126,7 @@ class ClientData(BaseModel):
     customer_value_score: Optional[float] = Field(None, description="Score de valeur client", examples=[50.0])
     Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3", examples=[120.5])
     GrandCompte: bool = Field(..., description="Indicateur Grand Compte", examples=[False])
-    clp_contrat_ap_stat: Optional[str] = Field(None, description="Statut contrat AP", examples=["STAT_01"])
+    clp_contrat_ap_stat: Optional[float] = Field(None, description="Statut contrat AP encodé", examples=[1.0])
     annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat", examples=[1.5])
     Turnover_N_signature_1: float = Field(..., description="CA signature 1", examples=[3500.0])
     Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1", examples=[150.0])
@@ -141,7 +141,7 @@ class ClientData(BaseModel):
     Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1", examples=[0.0])
     Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1", examples=[0.0])
     Famille_14_N_signature_1: float = Field(..., description="Famille 14 signature 1", examples=[0.0])
-    division: Optional[str] = Field(None, description="Division", examples=["DIV_A"])
+    division: Optional[float] = Field(None, description="Division encodée", examples=[0.0])
     Famille_9_N_signature_3: float = Field(..., description="Famille 9 signature 3", examples=[0.0])
 
     model_config = ConfigDict(
@@ -151,7 +151,7 @@ class ClientData(BaseModel):
                 "customer_value_score": 50.0,
                 "Panier_Moyen_N_signature_3": 120.5,
                 "GrandCompte": False,
-                "clp_contrat_ap_stat": "STAT_01",
+                "clp_contrat_ap_stat": 0.0,
                 "annees_depuis_dernier_achat": 1.5,
                 "Turnover_N_signature_1": 3500.0,
                 "Panier_Moyen_N_signature_1": 150.0,
@@ -166,12 +166,11 @@ class ClientData(BaseModel):
                 "Famille_2_N_signature_1": 0.0,
                 "Famille_11_N_signature_1": 0.0,
                 "Famille_14_N_signature_1": 0.0,
-                "division": "DIV_A",
+                "division": 0.0,
                 "Famille_9_N_signature_3": 0.0,
             }
         },
     )
-
 
 class PredictionResponse(BaseModel):
     prediction: int = Field(..., description="Classe prédite (0 ou 1)")
