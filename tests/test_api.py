@@ -22,7 +22,7 @@ def valid_payload():
         "customer_value_score": 50.0,
         "Panier_Moyen_N_signature_3": 120.5,
         "GrandCompte": False,
-        "clp_contrat_ap_stat": "STAT_01",
+        "clp_contrat_ap_stat": 1.0,
         "annees_depuis_dernier_achat": 1.5,
         "Turnover_N_signature_1": 3500.0,
         "Panier_Moyen_N_signature_1": 150.0,
@@ -37,7 +37,7 @@ def valid_payload():
         "Famille_2_N_signature_1": 0.0,
         "Famille_11_N_signature_1": 0.0,
         "Famille_14_N_signature_1": 0.0,
-        "division": "DIV_A",
+        "division": 0.0,
         "Famille_9_N_signature_3": 0.0,
     }
 
