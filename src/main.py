@@ -11,7 +11,7 @@ import onnxruntime as ort
 import pandas as pd
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.database import AsyncSessionLocal, Base, engine
 from src.models import PredictionLog
@@ -126,7 +126,7 @@ class ClientData(BaseModel):
     customer_value_score: Optional[float] = Field(None, description="Score de valeur client", examples=[50.0])
     Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3", examples=[120.5])
     GrandCompte: bool = Field(..., description="Indicateur Grand Compte", examples=[False])
-    clp_contrat_ap_stat: Optional[float | int] = Field(None, description="Statut contrat AP encodé", examples=[1.0])
+    clp_contrat_ap_stat: Union[float, str] = Field(None, description="Statut contrat AP encodé", examples=[1.0])
     annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat", examples=[1.5])
     Turnover_N_signature_1: float = Field(..., description="CA signature 1", examples=[3500.0])
     Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1", examples=[150.0])
@@ -141,8 +141,14 @@ class ClientData(BaseModel):
     Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1", examples=[0.0])
     Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1", examples=[0.0])
     Famille_14_N_signature_1: float = Field(..., description="Famille 14 signature 1", examples=[0.0])
-    division: Optional[float | int] = Field(None, description="Division encodée", examples=[0.0])
+    division: Union[float, str] = Field(None, description="Division encodée", examples=[0.0])
     Famille_9_N_signature_3: float = Field(..., description="Famille 9 signature 3", examples=[0.0])
+
+    @field_validator("clp_contrat_ap_stat", "division", mode="before")
+    @classmethod
+    def force_string_type(cls, v):
+        # Convertit automatiquement 1.0 -> "1.0" ou 0 -> "0"
+        return str(v)
 
     model_config = ConfigDict(
         populate_by_name=True,
