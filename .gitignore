@@ -13,9 +13,12 @@ artifacts/
 mlruns/
 **/mlruns/
 
-# A voir si je les exclue ou pas
-# *.joblib
-# *.pkl
+# On conserve le suivi d'historique MLflow pour le correcteur
+# !reports/historique_optimisations.csv
+
+# Exclusion des artefacts de modèles lourds
+*.joblib
+*.pkl
 
 # ==========================================
 # 2. Python & Environnements
@@ -52,7 +55,6 @@ postman/
 .coverage
 htmlcov/
 .mypy_cache/
-scripts/analyze_drift.py
 
 # ==========================================
 # 4. Packaging & Distribution
