@@ -10,22 +10,6 @@ jobs:
     name: Run Pytest (Unit & Performance)
     runs-on: ubuntu-latest
 
-    # Le conteneur PostgreSQL doit être au niveau du job
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgrespassword
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -44,7 +28,7 @@ jobs:
 
       - name: Run Pytest
         env:
-          DATABASE_URL: postgresql+asyncpg://p8_oc_mlops_part2_db_user:llJ81uZProdA5WKLyn6xs3PEldHsa0mo@dpg-daaive942hec73akonog-a.frankfurt-postgres.render.com/p8_oc_mlops_part2_db?ssl=require
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           pytest
 
