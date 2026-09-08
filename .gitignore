@@ -49,6 +49,7 @@ venv.bak/
 postman/
 .postman/
 *.pdf
+NB4.ipynb
 
 # Cache Pytest, Coverage & MLOps
 .pytest_cache/

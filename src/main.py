@@ -12,29 +12,72 @@ import pandas as pd
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
+from fastapi.responses import PlainTextResponse
 
 from src.database import AsyncSessionLocal, Base, engine
 from src.models import PredictionLog
 
-# Dictionnaire global pour stocker la session ONNX
+import os
+import threading
+
+# Dictionnaire global pour stocker la session ONNX et la config de production
 ml_models: Dict[str, Any] = {}
 
 # --- CONFIGURATION DU LOGGING POUR MONITORING / EVIDENTLY ---
+# Cohérence avec le notebook 4 : LOGS_FILE = PROJECT_ROOT / "logs" / "predictions.jsonl"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOGS_DIR = PROJECT_ROOT / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
-PREDICTIONS_LOG_FILE = LOGS_DIR / "predictions.jsonl"
+PREDICTIONS_LOG_FILE = Path(os.getenv("PREDICTIONS_LOG_FILE", LOGS_DIR / "predictions.jsonl"))
+
+# Verrou pour garantir qu'une ligne JSONL n'est jamais écrite entrelacée
+# quand plusieurs background_tasks écrivent en même temps (benchmark concurrent)
+_log_lock = threading.Lock()
+
+# Clés minimales attendues par le notebook 4 (sections 5 et 6)
+#   - santé opérationnelle : "status", "latency_ms"
+#   - drift Evidently     : "inputs", "prediction" (pour status == "success")
+_REQUIRED_SUCCESS_KEYS = ("status", "latency_ms", "inputs", "prediction")
 
 
-def log_prediction(payload: Dict[str, Any]):
-    """Écrit un enregistrement au format JSON Lines (JSONL) pour le monitoring."""
+def log_prediction(payload: Dict[str, Any]) -> None:
+    """Écrit UN enregistrement JSON compact par ligne (JSONL) pour le monitoring.
+
+    Format contractuel avec le notebook 4 :
+      - 1 ligne = 1 JSON complet (pas de pretty-print, pas de print())
+      - status == "success" => clés "status", "latency_ms", "inputs", "prediction"
+      - status == "error"   => clés "status", "latency_ms", "inputs", "error"
+    """
     try:
         json_payload = payload.copy()
         if isinstance(json_payload.get("timestamp"), datetime):
             json_payload["timestamp"] = json_payload["timestamp"].isoformat()
 
-        with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
-            f.write(json.dumps(json_payload, ensure_ascii=False) + "\n")
+        # Garde-fou : ne jamais écrire un record "success" incomplet,
+        # sinon le drift Evidently du notebook 4 plantera silencieusement
+        if json_payload.get("status") == "success":
+            missing = [k for k in _REQUIRED_SUCCESS_KEYS if k not in json_payload]
+            if missing:
+                print(f"⚠️ Log 'success' incomplet (clés manquantes : {missing}) — non écrit")
+                return
+
+        # Valeurs numpy -> natifs Python (json.dumps plante sur np.int64/np.float32)
+        def _to_native(obj):
+            if isinstance(obj, (np.integer, np.floating)):
+                return obj.item()
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, dict):
+                return {str(k): _to_native(v) for k, v in obj.items()}
+            if isinstance(obj, (list, tuple)):
+                return [_to_native(v) for v in obj]
+            return obj
+
+        json_payload = _to_native(json_payload)
+
+        with _log_lock:
+            with open(PREDICTIONS_LOG_FILE, mode="a", encoding="utf-8") as f:
+                f.write(json.dumps(json_payload, ensure_ascii=False) + "\n")
     except Exception as e:
         print(f"⚠️ Erreur lors de l'écriture du log JSONL : {e}")
 
@@ -123,26 +166,28 @@ async def add_process_time_header(request: Request, call_next):
 
 # --- SCHÉMAS PYDANTIC ---
 class ClientData(BaseModel):
+    # Aligné exactement sur config_production.json > features_model
+    # Ordre et noms identiques, types alignés sur le CSV exporté (NB3)
     customer_value_score: Optional[float] = Field(None, description="Score de valeur client", examples=[50.0])
     Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3", examples=[120.5])
+    clp_contrat_ap_stat: Optional[str] = Field(None, description="Statut contrat AP (catégoriel)", examples=["ACTIF"])
     GrandCompte: bool = Field(..., description="Indicateur Grand Compte", examples=[False])
-    clp_contrat_ap_stat: Optional[float | int] = Field(None, description="Statut contrat AP encodé", examples=[1.0])
-    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat", examples=[1.5])
     Turnover_N_signature_1: float = Field(..., description="CA signature 1", examples=[3500.0])
+    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat", examples=[1.5])
     Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1", examples=[150.0])
-    percent_EC: float = Field(..., alias="%EC", description="Pourcentage EC", examples=[12.5])
-    Nb_lignes_N_signature_1: float = Field(..., description="Nb lignes signature 1", examples=[8.0])
     Turnover_N_signature_3: float = Field(..., description="CA signature 3", examples=[1500.0])
-    Famille_2_N_signature_2: float = Field(..., description="Famille 2 signature 2", examples=[0.0])
-    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2", examples=[135.0])
-    act_val_cust_3M: bool = Field(..., description="Valeur client active 3 mois", examples=[True])
-    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis 1ère facture", examples=[4.2])
-    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1", examples=[0.0])
-    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1", examples=[0.0])
+    percent_EC: float = Field(..., alias="%EC", description="Pourcentage EC", examples=[12.5])
     Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1", examples=[0.0])
-    Famille_14_N_signature_1: float = Field(..., description="Famille 14 signature 1", examples=[0.0])
-    division: Optional[float | int] = Field(None, description="Division encodée", examples=[0.0])
-    Famille_9_N_signature_3: float = Field(..., description="Famille 9 signature 3", examples=[0.0])
+    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2", examples=[135.0])
+    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis 1ère facture", examples=[4.2])
+    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1", examples=[0.0])
+    act_val_cust_3M: bool = Field(..., description="Valeur client active 3 mois", examples=[True])
+    Famille_2_N_signature_2: float = Field(..., description="Famille 2 signature 2", examples=[0.0])
+    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1", examples=[0.0])
+    Nb_lignes_N_signature_1: float = Field(..., description="Nb lignes signature 1", examples=[8.0])
+    Famille_1_N_signature_1: float = Field(..., description="Famille 1 signature 1", examples=[0.0])
+    division: str = Field(..., description="Division (catégoriel)", examples=["DIV_A"])
+    Famille_12_N_signature_2: float = Field(..., description="Famille 12 signature 2", examples=[0.0])
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -150,28 +195,27 @@ class ClientData(BaseModel):
             "example": {
                 "customer_value_score": 50.0,
                 "Panier_Moyen_N_signature_3": 120.5,
+                "clp_contrat_ap_stat": "ACTIF",
                 "GrandCompte": False,
-                "clp_contrat_ap_stat": 1.0,
-                "annees_depuis_dernier_achat": 1.5,
                 "Turnover_N_signature_1": 3500.0,
+                "annees_depuis_dernier_achat": 1.5,
                 "Panier_Moyen_N_signature_1": 150.0,
-                "%EC": 12.5,
-                "Nb_lignes_N_signature_1": 8.0,
                 "Turnover_N_signature_3": 1500.0,
-                "Famille_2_N_signature_2": 0.0,
-                "Panier_Moyen_N_signature_2": 135.0,
-                "act_val_cust_3M": True,
-                "annees_depuis_1ere_facture": 4.2,
-                "Famille_0_N_signature_1": 0.0,
-                "Famille_2_N_signature_1": 0.0,
+                "%EC": 12.5,
                 "Famille_11_N_signature_1": 0.0,
-                "Famille_14_N_signature_1": 0.0,
-                "division": 0.0,
-                "Famille_9_N_signature_3": 0.0,
+                "Panier_Moyen_N_signature_2": 135.0,
+                "annees_depuis_1ere_facture": 4.2,
+                "Famille_2_N_signature_1": 0.0,
+                "act_val_cust_3M": True,
+                "Famille_2_N_signature_2": 0.0,
+                "Famille_0_N_signature_1": 0.0,
+                "Nb_lignes_N_signature_1": 8.0,
+                "Famille_1_N_signature_1": 0.0,
+                "division": "DIV_A",
+                "Famille_12_N_signature_2": 0.0,
             }
         },
     )
-
 class PredictionResponse(BaseModel):
     prediction: int = Field(..., description="Classe prédite (0 ou 1)")
     probability: Optional[float] = Field(None, description="Probabilité classe 1")
@@ -341,3 +385,75 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Erreur lors de l'inférence ONNX : {str(e)}",
         )
+
+@app.get("/logs/export", response_class=PlainTextResponse, tags=["Monitoring"])
+def export_prediction_logs(
+    status_filter: Optional[str] = None,
+    limit: Optional[int] = None,
+):
+    """Exporte le journal de prédictions JSONL (pour le monitoring NB4).
+
+    - status_filter : "success" ou "error" pour ne garder qu'un type de record
+    - limit         : ne renvoyer que les N derniers enregistrements
+    """
+    if not PREDICTIONS_LOG_FILE.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Aucun log de prédiction disponible pour l'instant.",
+        )
+
+    with _log_lock:  # évite de lire pendant une écriture
+        lines = PREDICTIONS_LOG_FILE.read_text(encoding="utf-8").splitlines()
+
+    # On ne renvoie que les lignes JSON valides : le NB4 n'aura jamais
+    # à gérer de JSONDecodeError sur l'export
+    valid_lines = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if status_filter and rec.get("status") != status_filter:
+            continue
+        valid_lines.append(line)
+
+    if limit is not None and limit > 0:
+        valid_lines = valid_lines[-limit:]
+
+    return PlainTextResponse("\n".join(valid_lines) + "\n", media_type="application/x-ndjson")
+
+@app.get("/logs/stats", tags=["Monitoring"])
+def prediction_logs_stats():
+    """Résumé du journal : volume, taux d'erreur, latence moyenne."""
+    if not PREDICTIONS_LOG_FILE.exists():
+        return {"n_records": 0, "n_success": 0, "n_error": 0}
+
+    with _log_lock:
+        lines = PREDICTIONS_LOG_FILE.read_text(encoding="utf-8").splitlines()
+
+    n_success, n_error, n_corrupt, latencies = 0, 0, 0, []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            n_corrupt += 1
+            continue
+        if rec.get("status") == "success":
+            n_success += 1
+            if "latency_ms" in rec:
+                latencies.append(rec["latency_ms"])
+        else:
+            n_error += 1
+
+    return {
+        "n_records": n_success + n_error,
+        "n_success": n_success,
+        "n_error": n_error,
+        "n_corrupt_lines": n_corrupt,
+        "error_rate": round(n_error / (n_success + n_error), 4) if (n_success + n_error) else None,
+        "latency_ms_mean": round(float(np.mean(latencies)), 2) if latencies else None,
+    }

@@ -1,83 +1,83 @@
-name: CI/CD Pipeline - FastAPI Render
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, test ]
+    branches: ["main","test"]
+  pull_request:
+    branches: ["main","test"]
 
 jobs:
-  # 1. Tests unitaires, d'intégration (PostgreSQL) et de latence
   test:
-    name: Run Pytest (Unit & Performance)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_pass
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install -e .
+          pip install -r requirements.txt pytest pytest-asyncio pytest-cov httpx pytest-docker
 
-      - name: Run Pytest
+      - name: Run unit tests
+        run: pytest test/test_api.py -v --cov=src --cov-report=term-missing
+
+      - name: Run integration tests (DB)
+        run: pytest test/test_integration_db.py -v --cov=src --cov-report=term-missing
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          pytest
+          DATABASE_URL: postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db
 
-  # 2. Validation de l'image Docker & Smoke Test du conteneur
-  docker-check:
-    name: Build & Test Docker Image
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Run security tests
+        run: pytest test/test_security_resilience.py -v --cov=src --cov-report=term-missing
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Run deployment configuration tests
+        run: pytest test/test_deployment_config.py -v --cov=src --cov-report=term-missing
 
-      - name: Build Docker Image
-        run: |
-          docker build -t scoring-api:test .
-
-      - name: Run Container & Smoke Test
-        env:
-          DATABASE_URL: postgresql+asyncpg://p8_db_ba6y_user:xPkdpcurgzpMopfxc8JRAnvEspmurHib@dpg-d9q6o5lbedkc73b78mtg-a.frankfurt-postgres.render.com/p8_db_ba6y?ssl=require
-        run: |
-          # Transmission de la variable d'environnement au conteneur avec -e
-          docker run -d --name test-api -p 8000:8000 -e DATABASE_URL="$DATABASE_URL" scoring-api:test
-          
-          # Pause pour laisser le temps à Uvicorn / ONNX de démarrer
-          sleep 5
-          
-          # Test de santé (Smoke test) sur le conteneur en cours d'exécution
-          curl --fail http://localhost:8000/health || (docker logs test-api && exit 1)
-
-      - name: Stop and Cleanup Container
+      - name: Upload coverage report
         if: always()
-        run: |
-          docker stop test-api || true
-          docker rm test-api || true
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-  # 3. Déploiement automatique sur Render
   deploy:
-    name: Trigger Render Deployment
-    needs: docker-check
+    needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Deploy on Render
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to Render
         run: |
           curl -X POST \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            -H "Accept: application/json" \
-            "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys"
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"serviceId": "${{ secrets.RENDER_SERVICE_ID }}", "clearCache": false}' \
+            https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys
