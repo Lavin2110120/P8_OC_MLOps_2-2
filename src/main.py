@@ -11,7 +11,7 @@ import onnxruntime as ort
 import pandas as pd
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from fastapi.responses import PlainTextResponse
 
 from src.database import AsyncSessionLocal, Base, engine
@@ -174,7 +174,7 @@ class ClientData(BaseModel):
     annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat", examples=[1.5])
     Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1", examples=[150.0])
     Turnover_N_signature_3: float = Field(..., description="CA signature 3", examples=[1500.0])
-    percent_EC: float = Field(..., alias="%EC", description="Pourcentage EC", examples=[12.5])
+    percent_EC: float = Field(..., alias="_EC", validation_alias=AliasChoices("_EC", "%EC"), description="Pourcentage EC", examples=[12.5])
     Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1", examples=[0.0])
     Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2", examples=[135.0])
     annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis 1ère facture", examples=[4.2])
@@ -199,7 +199,7 @@ class ClientData(BaseModel):
                 "annees_depuis_dernier_achat": 1.5,
                 "Panier_Moyen_N_signature_1": 150.0,
                 "Turnover_N_signature_3": 1500.0,
-                "%EC": 12.5,
+                "_EC": 12.5,
                 "Famille_11_N_signature_1": 0.0,
                 "Panier_Moyen_N_signature_2": 135.0,
                 "annees_depuis_1ere_facture": 4.2,

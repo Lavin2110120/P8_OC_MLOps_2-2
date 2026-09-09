@@ -3,7 +3,7 @@ import sys
 import time
 from pathlib import Path
 from unittest.mock import patch
-
+from src.main import ClientData
 import pytest
 
 # Ajoute le dossier racine du projet au PYTHONPATH.
@@ -32,13 +32,16 @@ class TestBaseEndpoints:
         assert data["model_loaded"] is True
         assert data.get("engine") == "onnxruntime"
 
-    def test_health_check_model_not_loaded(self, client):
-        with patch("src.main.ml_models", {}):
-            response = client.get("/health")
+    def test_health_check_model_not_loaded(self, client, monkeypatch):
+        """Vérifie que l'endpoint /health retourne 'unhealthy' quand le modèle est absent."""
+        monkeypatch.setattr("src.main.ml_models", {})
+        
+        response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "unhealthy"
         assert data["model_loaded"] is False
+    
 
 
 class TestPrediction:
@@ -110,7 +113,7 @@ class TestValidation:
 
     def test_predict_invalid_categorical_field(self, client, valid_payload):
         payload = valid_payload.copy()
-        payload["division"] = "INVALID_DIVISION"
+        payload["act_val_cust_3M"] = "OUI"
         response = client.post("/predict", json=payload)
         assert response.status_code == 422
 
@@ -139,19 +142,14 @@ class TestSchemaConsistency:
         """Vérifie que les inputs ONNX sont couverts par le schéma API."""
         response = client.get("/debug/schema")
         assert response.status_code == 200, f"Erreur /debug/schema : {response.text}"
-        
-        onnx_inputs = {item["name"] for item in response.json()["inputs"]}
-        
-        from src.main import ClientData
+        response_data = response.json()
+        onnx_inputs = {item["name"] for item in response_data["inputs"]}
         api_fields = {field.alias or name for name, field in ClientData.model_fields.items()}
         
-
         if len(onnx_inputs) == 1:
             pytest.skip("Modèle ONNX à matrice unique, pas d'inputs nommés")
-        
         missing = onnx_inputs - api_fields
         assert not missing, f"Inputs ONNX absents du schéma API : {missing}"
-
 
 class TestLogging:
     def test_process_time_header_present(self, client, valid_payload):

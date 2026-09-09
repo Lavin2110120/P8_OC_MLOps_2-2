@@ -7,10 +7,11 @@ import pytest
 from fastapi.testclient import TestClient
 from src.main import app
 
-
 @pytest.fixture
 def client():
-    return TestClient(app)
+    """Crée un client de test avec la lifespan FastAPI correctement initialisée."""
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.fixture
@@ -37,3 +38,7 @@ def valid_payload():
         "division": "DIV_A",
         "Famille_12_N_signature_2": 0.0,
     }
+
+@pytest.fixture(scope="function")
+def client():
+    return TestClient(app)
