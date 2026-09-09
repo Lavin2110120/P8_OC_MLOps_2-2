@@ -43,18 +43,18 @@ jobs:
           pip install -r requirements.txt pytest pytest-asyncio pytest-cov httpx pytest-docker
 
       - name: Run unit tests
-        run: pytest test/test_api.py -v --cov=src --cov-report=term-missing
+        run: pytest tests/test_api.py -v --cov=src --cov-report=term-missing
 
       - name: Run integration tests (DB)
-        run: pytest test/test_integration_db.py -v --cov=src --cov-report=term-missing
+        run: pytest tests/test_integration_db.py -v --cov=src --cov-report=term-missing
         env:
           DATABASE_URL: postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db
 
       - name: Run security tests
-        run: pytest test/test_security_resilience.py -v --cov=src --cov-report=term-missing
+        run: pytest tests/test_security_resilience.py -v --cov=src --cov-report=term-missing
 
       - name: Run deployment configuration tests
-        run: pytest test/test_deployment_config.py -v --cov=src --cov-report=term-missing
+        run: pytest tests/test_deployment_config.py -v --cov=src --cov-report=term-missing
 
       - name: Upload coverage report
         if: always()
