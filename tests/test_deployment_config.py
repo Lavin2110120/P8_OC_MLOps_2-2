@@ -4,7 +4,12 @@ import os
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.main import app, DATABASE_URL, PREDICTIONS_LOG_FILE
+from src.main import app, PREDICTIONS_LOG_FILE
+from src.database import DATABASE_URL
+
+def test_predict(client, valid_payload):
+    response = client.post("/predict", json=valid_payload)
+    assert response.status_code == 200
 
 class TestConfiguration:
     """Tests de vérification des variables de configuration."""

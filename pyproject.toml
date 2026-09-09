@@ -55,8 +55,10 @@ dependencies = [
 ]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 asyncio_mode = "auto"
-testpaths = ["tests", "test"]
+addopts = "-v --tb=short"
 markers = ["performance: marqueurs pour les tests de performance de latence et charge"]
 
 [build-system]

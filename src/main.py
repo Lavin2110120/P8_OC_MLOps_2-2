@@ -166,8 +166,6 @@ async def add_process_time_header(request: Request, call_next):
 
 # --- SCHÉMAS PYDANTIC ---
 class ClientData(BaseModel):
-    # Aligné exactement sur config_production.json > features_model
-    # Ordre et noms identiques, types alignés sur le CSV exporté (NB3)
     customer_value_score: Optional[float] = Field(None, description="Score de valeur client", examples=[50.0])
     Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3", examples=[120.5])
     clp_contrat_ap_stat: Optional[str] = Field(None, description="Statut contrat AP (catégoriel)", examples=["ACTIF"])
@@ -277,6 +275,13 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
 
     try:
         input_df = pd.DataFrame([input_dict])
+
+
+        sanitize_mapping = {"%EC": "_EC"  } # ONNX attend _EC donc on remplace
+        for original_col, onnx_col in sanitize_mapping.items():
+            if original_col in input_df.columns:
+                input_df.rename(columns={original_col: onnx_col}, inplace=True)
+
         inputs_onnx = {}
         input_inputs = session.get_inputs()
 
@@ -311,6 +316,7 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
                 col_name = inp.name
                 if col_name in input_df:
                     val = input_df[col_name].values
+                    
                     if "float" in inp.type:
                         numeric_val = pd.to_numeric(val, errors="coerce")
                         if pd.isna(numeric_val).all() and pd.notna(val).any():
@@ -320,10 +326,10 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
                     elif "int" in inp.type:
                         val = pd.to_numeric(val, errors="coerce").fillna(0).astype(np.int64)
                     elif "string" in inp.type:
-                        val = val.astype(str)
+                        val = np.asarray(val, dtype=object).astype(str)
                     else:
-                        val = val.astype(str)
-
+                        val = np.asarray(val, dtype=object).astype(str)
+                    
                     inputs_onnx[col_name] = val.reshape(-1, 1)
                 else:
                     raise HTTPException(

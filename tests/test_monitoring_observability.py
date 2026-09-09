@@ -1,11 +1,9 @@
-import pytest
-from fastapi.testclient import TestClient
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.main import app
+
 
 class TestMonitoring:
     """Tests des endpoints de monitoring et observabilité."""
@@ -20,15 +18,13 @@ class TestMonitoring:
         assert "engine" in data
         assert "latency_ms" in data
 
-    def test_logs_stats_endpoint(self, client):
+    def test_logs_stats_endpoint(self, client, valid_payload):
         """Vérifie que /logs/stats retourne des statistiques cohérentes."""
-        # Insère des logs de test
         for i in range(5):
-            client.post("/predict", json={
-                "customer_value_score": 50.0 + i,
-                "Panier_Moyen_N_signature_3": 120.5,
-                # ... autres champs requis
-            })
+            payload = valid_payload.copy()
+            payload["customer_value_score"] = 50.0 + i
+            response = client.post("/predict", json=payload)
+            assert response.status_code == 200
 
         response = client.get("/logs/stats")
         assert response.status_code == 200
@@ -38,18 +34,16 @@ class TestMonitoring:
         assert data["latency_ms_mean"] is not None
         assert 0 <= data["error_rate"] <= 1
 
-    def test_logs_export_format(self, client):
+    def test_logs_export_format(self, client, valid_payload):
         """Vérifie que l'export des logs est au format attendu."""
-        client.post("/predict", json={
-            "customer_value_score": 50.0,
-            "Panier_Moyen_N_signature_3": 120.5,
-            # ... autres champs requis
-        })
+        response = client.post("/predict", json=valid_payload)
+        assert response.status_code == 200
         response = client.get("/logs/export")
         assert response.status_code == 200
         assert "text/plain" in response.headers["content-type"]
         assert "prediction" in response.text
         assert "timestamp" in response.text
+
 
 class TestObservability:
     """Tests de visibilité et de debugging."""
@@ -70,4 +64,4 @@ class TestObservability:
         api_latency = (time.time() - start_time) * 1000
 
         header_latency = float(response.headers.get("X-Process-Time-Ms", 0))
-        assert abs(api_latency - header_latency) < 10  # Tolérance de 10ms
+        assert abs(api_latency - header_latency) < 10

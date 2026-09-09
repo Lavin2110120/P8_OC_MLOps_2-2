@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.database import AsyncSessionLocal, DATABASE_URL
 from src.main import app
 from src.models import Base, PredictionLog
-from test_api import valid_payload
 
 # --- FIXTURES GLOBALES ---
 @pytest_asyncio.fixture(scope="module")
@@ -69,7 +68,7 @@ class TestPredictionLogging:
     """Tests d'intégration complète entre l'API et la base de données."""
 
     @pytest.mark.asyncio
-    async def test_predict_success_logging(self):
+    async def test_predict_success_logging(self, valid_payload):
         """Vérifie qu'une prédiction réussie insère un log valide en base."""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -97,7 +96,7 @@ class TestPredictionLogging:
             assert log_entry.inputs["%EC"] == 12.5  # Vérifie le payload attendu
 
     @pytest.mark.asyncio
-    async def test_predict_logging_latency(self):
+    async def test_predict_logging_latency(self, valid_payload):
         """Vérifie que l'insertion en base prend moins de 100ms."""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -122,7 +121,7 @@ class TestPredictionLogging:
         assert db_latency < 100, f"Insertion en base trop lente : {db_latency:.2f}ms"
 
     @pytest.mark.asyncio
-    async def test_multiple_predictions_logging(self):
+    async def test_multiple_predictions_logging(self, valid_payload):
         """Vérifie que plusieurs prédictions sont correctement loguées."""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -147,7 +146,7 @@ class TestErrorHandling:
     """Tests de gestion des erreurs et cas limites."""
 
     @pytest.mark.asyncio
-    async def test_predict_fails_to_log_to_db(self, mocker):
+    async def test_predict_fails_to_log_to_db(self, mocker, valid_payload):
         """Vérifie que l'API retourne une erreur 500 si l'insertion en base échoue."""
         # Mock de la fonction de logging pour simuler une erreur
         mock_log = mocker.patch(
@@ -166,7 +165,7 @@ class TestErrorHandling:
         mock_log.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_invalid_payload_does_not_log(self):
+    async def test_invalid_payload_does_not_log(self, valid_payload):
         """Vérifie qu'un payload invalide ne tente pas d'insérer de log."""
         invalid_payload = valid_payload.copy()
         invalid_payload["annees_depuis_dernier_achat"] = -5.0  # Valeur invalide
@@ -184,7 +183,7 @@ class TestErrorHandling:
             assert len(logs) == 0
 
     @pytest.mark.asyncio
-    async def test_concurrent_predictions_logging(self):
+    async def test_concurrent_predictions_logging(self, valid_payload):
         """Teste la tenue de charge avec 20 requêtes concurrentes."""
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
