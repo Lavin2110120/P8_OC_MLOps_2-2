@@ -24,19 +24,15 @@ import threading
 ml_models: Dict[str, Any] = {}
 
 # --- CONFIGURATION DU LOGGING POUR MONITORING / EVIDENTLY ---
-# Cohérence avec le notebook 4 : LOGS_FILE = PROJECT_ROOT / "logs" / "predictions.jsonl"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOGS_DIR = PROJECT_ROOT / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 PREDICTIONS_LOG_FILE = Path(os.getenv("PREDICTIONS_LOG_FILE", LOGS_DIR / "predictions.jsonl"))
 
-# Verrou pour garantir qu'une ligne JSONL n'est jamais écrite entrelacée
-# quand plusieurs background_tasks écrivent en même temps (benchmark concurrent)
+
 _log_lock = threading.Lock()
 
-# Clés minimales attendues par le notebook 4 (sections 5 et 6)
-#   - santé opérationnelle : "status", "latency_ms"
-#   - drift Evidently     : "inputs", "prediction" (pour status == "success")
+
 _REQUIRED_SUCCESS_KEYS = ("status", "latency_ms", "inputs", "prediction")
 
 
@@ -53,8 +49,7 @@ def log_prediction(payload: Dict[str, Any]) -> None:
         if isinstance(json_payload.get("timestamp"), datetime):
             json_payload["timestamp"] = json_payload["timestamp"].isoformat()
 
-        # Garde-fou : ne jamais écrire un record "success" incomplet,
-        # sinon le drift Evidently du notebook 4 plantera silencieusement
+   
         if json_payload.get("status") == "success":
             missing = [k for k in _REQUIRED_SUCCESS_KEYS if k not in json_payload]
             if missing:
@@ -166,51 +161,53 @@ async def add_process_time_header(request: Request, call_next):
 
 # --- SCHÉMAS PYDANTIC ---
 class ClientData(BaseModel):
-    customer_value_score: Optional[float] = Field(None, description="Score de valeur client", examples=[50.0])
-    Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3", examples=[120.5])
-    clp_contrat_ap_stat: Optional[str] = Field(None, description="Statut contrat AP (catégoriel)", examples=["ACTIF"])
-    GrandCompte: bool = Field(..., description="Indicateur Grand Compte", examples=[False])
-    Turnover_N_signature_1: float = Field(..., description="CA signature 1", examples=[3500.0])
-    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat", examples=[1.5])
-    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1", examples=[150.0])
-    Turnover_N_signature_3: float = Field(..., description="CA signature 3", examples=[1500.0])
-    percent_EC: float = Field(..., alias="_EC", validation_alias=AliasChoices("_EC", "%EC"), description="Pourcentage EC", examples=[12.5])
-    Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1", examples=[0.0])
-    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2", examples=[135.0])
-    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis 1ère facture", examples=[4.2])
-    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1", examples=[0.0])
-    act_val_cust_3M: bool = Field(..., description="Valeur client active 3 mois", examples=[True])
-    Famille_2_N_signature_2: float = Field(..., description="Famille 2 signature 2", examples=[0.0])
-    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1", examples=[0.0])
-    Nb_lignes_N_signature_1: float = Field(..., description="Nb lignes signature 1", examples=[8.0])
-    Famille_1_N_signature_1: float = Field(..., description="Famille 1 signature 1", examples=[0.0])
-    division: str = Field(..., description="Division (catégoriel)", examples=["DIV_A"])
-    Famille_12_N_signature_2: float = Field(..., description="Famille 12 signature 2", examples=[0.0])
+    """Données client conformes aux 20 features de production."""
+
+    customer_value_score: Optional[float] = Field(default=None, description="Score de valeur client")
+    clp_contrat_ap_stat: Optional[str] = Field(default=None, description="Statut contrat AP (catégoriel)")
+    act_val_cust_3M: bool = Field(..., description="Valeur client active sur 3 mois")
+    Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3")
+    GrandCompte: bool = Field(..., description="Indicateur grand compte")
+    EC: float = Field(..., description="Pourcentage EC")
+    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2")
+    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis le dernier achat")
+    Turnover_N_signature_3: float = Field(..., description="Turnover signature 3")
+    Turnover_N_signature_1: float = Field(..., description="Turnover signature 1")
+    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1")
+    Famille_10_N_signature_3: float = Field(..., description="Famille 10 signature 3")
+    Famille_1_N_signature_3: float = Field(..., description="Famille 1 signature 3")
+    division: str = Field(..., description="Division (catégoriel)")
+    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1")
+    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis la première facture")
+    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1")
+    Turnover_N_signature_2: float = Field(..., description="Turnover signature 2")
+    Famille_12_N_signature_1: float = Field(..., description="Famille 12 signature 1")
+    Nb_lignes_N_signature_1: float = Field(..., description="Nombre de lignes signature 1")
 
     model_config = ConfigDict(
         populate_by_name=True,
         json_schema_extra={
             "example": {
                 "customer_value_score": 50.0,
-                "Panier_Moyen_N_signature_3": 120.5,
-                "clp_contrat_ap_stat": "ACTIF",
-                "GrandCompte": False,
-                "Turnover_N_signature_1": 3500.0,
-                "annees_depuis_dernier_achat": 1.5,
-                "Panier_Moyen_N_signature_1": 150.0,
-                "Turnover_N_signature_3": 1500.0,
-                "_EC": 12.5,
-                "Famille_11_N_signature_1": 0.0,
-                "Panier_Moyen_N_signature_2": 135.0,
-                "annees_depuis_1ere_facture": 4.2,
-                "Famille_2_N_signature_1": 0.0,
+                "clp_contrat_ap_stat": "BK",
                 "act_val_cust_3M": True,
-                "Famille_2_N_signature_2": 0.0,
+                "Panier_Moyen_N_signature_3": 120.5,
+                "GrandCompte": False,
+                "EC": 12.5,
+                "Panier_Moyen_N_signature_2": 135.0,
+                "annees_depuis_dernier_achat": 1.5,
+                "Turnover_N_signature_3": 1500.0,
+                "Turnover_N_signature_1": 3500.0,
                 "Famille_0_N_signature_1": 0.0,
-                "Nb_lignes_N_signature_1": 8.0,
-                "Famille_1_N_signature_1": 0.0,
+                "Famille_10_N_signature_3": 0.0,
+                "Famille_1_N_signature_3": 0.0,
                 "division": "DIV_A",
-                "Famille_12_N_signature_2": 0.0,
+                "Famille_2_N_signature_1": 0.0,
+                "annees_depuis_1ere_facture": 4.2,
+                "Panier_Moyen_N_signature_1": 150.0,
+                "Turnover_N_signature_2": 2000.0,
+                "Famille_12_N_signature_1": 0.0,
+                "Nb_lignes_N_signature_1": 8.0,
             }
         },
     )
@@ -275,13 +272,6 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
 
     try:
         input_df = pd.DataFrame([input_dict])
-
-
-        sanitize_mapping = {"%EC": "_EC"  } # ONNX attend _EC donc on remplace
-        for original_col, onnx_col in sanitize_mapping.items():
-            if original_col in input_df.columns:
-                input_df.rename(columns={original_col: onnx_col}, inplace=True)
-
         inputs_onnx = {}
         input_inputs = session.get_inputs()
 
@@ -292,14 +282,16 @@ async def predict(data: ClientData, background_tasks: BackgroundTasks):
             for col in numeric_df.columns:
                 if numeric_df[col].dtype == "bool":
                     numeric_df[col] = numeric_df[col].astype(np.float32)
-                elif numeric_df[col].dtype == "object":
+                else:
+                    # Toujours tenter la conversion numérique d'abord
                     converted = pd.to_numeric(numeric_df[col], errors="coerce")
-                    if converted.isna().all() and numeric_df[col].notna().any():
-                        numeric_df[col] = pd.factorize(numeric_df[col])[0].astype(np.float32)
+                    if converted.notna().all():
+                        numeric_df[col] = converted.astype(np.float32)
                     else:
-                        numeric_df[col] = converted.fillna(0.0).astype(np.float32)
+                        # Colonne catégorielle / texte -> factorize
+                        numeric_df[col] = pd.factorize(numeric_df[col].astype(str))[0].astype(np.float32)
 
-            arr = numeric_df.to_numpy().astype(np.float32)
+            arr = numeric_df.to_numpy(dtype=np.float32)  # cast explicite ici, plus sûr que .astype après
 
             expected_shape = input_inputs[0].shape
             if len(expected_shape) > 1 and isinstance(expected_shape[1], int):

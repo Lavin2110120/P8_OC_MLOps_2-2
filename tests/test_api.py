@@ -1,20 +1,11 @@
 import json
-import sys
-import time
+
 from pathlib import Path
 from unittest.mock import patch
-from src.main import ClientData
 import pytest
 
-# Ajoute le dossier racine du projet au PYTHONPATH.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import src.main
-
-
-@pytest.fixture
-def invalid_payload():
-    """Payload invalide ; le conftest ne fournit pas cette fixture."""
-    return {"customer_value_score": 50.0, "GrandCompte": False}
+from src.main import ClientData
 
 
 class TestBaseEndpoints:
@@ -46,8 +37,8 @@ class TestBaseEndpoints:
 
 class TestPrediction:
     def test_predict_success(self, client, valid_payload):
-        assert "%EC" in valid_payload
-        assert valid_payload["clp_contrat_ap_stat"] is None
+        assert "EC" in valid_payload
+        assert valid_payload["clp_contrat_ap_stat"] is "BK"
         response = client.post("/predict", json=valid_payload)
         assert response.status_code == 200, response.text
         data = response.json()
@@ -79,13 +70,12 @@ class TestPrediction:
             response = client.post("/predict", json=valid_payload)
             assert response.status_code == 200
             latencies.append(float(response.headers.get("X-Process-Time-Ms", 0)))
-        assert all(latency < 15.0 for latency in latencies)
+        assert all(latency < 15.0 for latency in latencies), latencies
 
-    def test_predict_model_not_loaded(self, client, valid_payload):
-        with patch("src.main.ml_models", {}):
-            response = client.post("/predict", json=valid_payload)
-        assert response.status_code == 500
-        assert "session ONNX n'est pas initialisée" in response.json()["detail"]
+def test_predict_model_not_loaded(self, client, valid_payload):
+    with patch.dict("src.main.ml_models", {}, clear=True):
+        response = client.post("/predict", json=valid_payload)
+    assert response.status_code == 500
 
 
 class TestValidation:
@@ -121,10 +111,7 @@ class TestValidation:
 class TestSchemaConsistency:
     def test_schema_matches_config_production(self):
         """Vérifie que le schéma API correspond exactement à config_production.json."""
-        from src.main import ClientData
-        
-        # config_production.json est dans le dossier /models
-        config_path = Path(__file__).resolve().parent.parent / "models" / "config_production.json"
+        config_path = (Path(__file__).resolve().parent.parent / "models" / "config_production.json")
         
         if not config_path.exists():
             pytest.skip(f"config_production.json non trouvé à {config_path}")

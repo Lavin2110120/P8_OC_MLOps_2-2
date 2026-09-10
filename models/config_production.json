@@ -2,28 +2,27 @@
   "features_model": [
     "customer_value_score",
     "clp_contrat_ap_stat",
-    "act_val_cust_3M",
     "Panier_Moyen_N_signature_3",
     "GrandCompte",
-    "_EC",
-    "Panier_Moyen_N_signature_2",
+    "act_val_cust_3M",
+    "Nb_lignes_N_signature_4",
+    "EC",
     "annees_depuis_dernier_achat",
+    "Panier_Moyen_N_signature_1",
+    "Nb_lignes_N_signature_1",
+    "Panier_Moyen_N_signature_2",
     "Turnover_N_signature_3",
     "Turnover_N_signature_1",
-    "Famille_0_N_signature_1",
-    "Famille_10_N_signature_3",
-    "Famille_1_N_signature_3",
-    "division",
-    "Famille_2_N_signature_1",
+    "Famille_5_N_signature_1",
+    "Famille_2_N_signature_2",
     "annees_depuis_1ere_facture",
-    "Panier_Moyen_N_signature_1",
-    "Turnover_N_signature_2",
-    "Famille_12_N_signature_1",
-    "Nb_lignes_N_signature_1"
+    "Famille_11_N_signature_1",
+    "Famille_14_N_signature_2",
+    "Famille_1_N_signature_1",
+    "Famille_2_N_signature_1"
   ],
   "colonnes_cat": [
-    "clp_contrat_ap_stat",
-    "division"
+    "clp_contrat_ap_stat"
   ],
-  "seuil_production": 0.07
+  "seuil_production": 0.17000000000000004
 }
