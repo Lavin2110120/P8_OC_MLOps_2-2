@@ -2,6 +2,8 @@ import os
 import time
 import numpy as np
 import pandas as pd
+import json
+import datetime
 
 # Machine Learning & ONNX Conversion
 import xgboost as xgb
@@ -26,7 +28,6 @@ def build_and_train_pipeline():
         n_informative=30, 
         random_state=42
     )
-    # 💡 Remplacer "feature_i" par "fi"
     feature_names = [f"f{i}" for i in range(50)]
     X_df = pd.DataFrame(X, columns=feature_names)
 
@@ -49,17 +50,14 @@ def build_and_train_pipeline():
 def convert_to_onnx(model, num_features, output_path="model_xgboost.onnx"):
     print(f"\n🔄 [2/4] Conversion du modèle vers {output_path}...")
     
-    # Définition du shape d'entrée : [Batch Size (dynamique), Nombre de features]
     initial_types = [('input', FloatTensorType([None, num_features]))]
     
-    # Conversion du modèle XGBoost via onnxmltools
     onnx_model = onnxmltools.convert_xgboost(
         model, 
         initial_types=initial_types,
         target_opset=15
     )
     
-    # Sauvegarde sur disque
     onnxmltools.utils.save_model(onnx_model, output_path)
     file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
     print(f"✅ Conversion réussie ! Taille du fichier ONNX : {file_size_mb:.2f} MB")
@@ -72,20 +70,14 @@ def convert_to_onnx(model, num_features, output_path="model_xgboost.onnx"):
 def validate_predictions(xgb_model, ort_session, sample_input):
     print("\n🔍 [3/4] Vérification de la cohérence des prédictions...")
     
-    # Prédiction XGBoost natif (Probabilités de la classe 1)
     xgb_probs = xgb_model.predict_proba(sample_input)[:, 1]
     
-    # Prédiction ONNX Runtime
     input_name = ort_session.get_inputs()[0].name
-    # ONNX attend un array float32 numpy
     onnx_input = {input_name: sample_input.to_numpy().astype(np.float32)}
     
-    # Les sorties ONNX pour un classifieur sont : [labels, probabilities_map]
     onnx_outputs = ort_session.run(None, onnx_input)
-    # Extraction de la probabilité de la classe 1
     onnx_probs = np.array([res[1] for res in onnx_outputs[1]])
 
-    # Vérification du de la différence maximale
     max_diff = np.max(np.abs(xgb_probs - onnx_probs))
     print(f"Différence maximale de probabilité : {max_diff:.8f}")
     
@@ -99,12 +91,11 @@ def validate_predictions(xgb_model, ort_session, sample_input):
 def benchmark_latency(xgb_model, ort_session, X_sample, iterations=1000):
     print(f"\n📊 [4/4] Lancement du Benchmark ({iterations} itérations)...")
     
-    # Préparation des inputs
-    single_df = X_sample.iloc[[0]] # 1 seul individu (Cas usuel d'une API de scoring)
+    single_df = X_sample.iloc[[0]]
     single_numpy = single_df.to_numpy().astype(np.float32)
     input_name = ort_session.get_inputs()[0].name
 
-    # --- Warmup (Chauffage pour éviter la sur-estimation de la 1ère exécution) ---
+    # --- Warmup ---
     for _ in range(50):
         _ = xgb_model.predict_proba(single_df)
         _ = ort_session.run(None, {input_name: single_numpy})
@@ -123,7 +114,7 @@ def benchmark_latency(xgb_model, ort_session, X_sample, iterations=1000):
     onnx_total_time = time.perf_counter() - start_time
     onnx_avg_ms = (onnx_total_time / iterations) * 1000
 
-    # --- Résultats ---
+    # --- Calculs & Résultats ---
     speedup = xgb_avg_ms / onnx_avg_ms if onnx_avg_ms > 0 else 0
     
     print("\n" + "=" * 55)
@@ -134,23 +125,27 @@ def benchmark_latency(xgb_model, ort_session, X_sample, iterations=1000):
     print(f"🚀 Gain de vitesse (Speedup) : x{speedup:.2f}")
     print("=" * 55)
 
+    # --- Sauvegarde des résultats en JSON ---
+    os.makedirs("benchmarks", exist_ok=True)
+    results = {
+        "date": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "iterations": iterations,
+        "xgb_avg_ms": round(xgb_avg_ms, 4),
+        "onnx_avg_ms": round(onnx_avg_ms, 4),
+        "speedup": round(speedup, 2),
+    }
+    json_path = f"benchmarks/onnx_bench_{datetime.date.today()}.json"
+    with open(json_path, "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"💾 Résultats enregistrés dans : {json_path}\n")
+
 
 # -------------------------------------------------------------------
 # Main Execution Flow
 # -------------------------------------------------------------------
 if __name__ == "__main__":
-    # 1. Entraînement
     model, X_data, feature_names = build_and_train_pipeline()
-    
-    # 2. Conversion
     onnx_path = convert_to_onnx(model, num_features=len(feature_names))
-    
-    # 3. Initialisation de la session ONNX Runtime
-    # Utilise 'CPUExecutionProvider' par défaut
     ort_session = ort.InferenceSession(onnx_path, providers=['CPUExecutionProvider'])
-    
-    # 4. Validation
     validate_predictions(model, ort_session, X_data.head(10))
-    
-    # 5. Benchmark
     benchmark_latency(model, ort_session, X_data, iterations=2000)
