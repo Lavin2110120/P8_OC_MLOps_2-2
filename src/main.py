@@ -160,29 +160,33 @@ async def add_process_time_header(request: Request, call_next):
 
 
 # --- SCHÉMAS PYDANTIC ---
+from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional
+
+
 class ClientData(BaseModel):
     """Données client conformes aux 20 features de production."""
 
     customer_value_score: Optional[float] = Field(default=None, description="Score de valeur client")
     clp_contrat_ap_stat: Optional[str] = Field(default=None, description="Statut contrat AP (catégoriel)")
-    act_val_cust_3M: bool = Field(..., description="Valeur client active sur 3 mois")
     Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3")
     GrandCompte: bool = Field(..., description="Indicateur grand compte")
-    EC: float = Field(..., description="Pourcentage EC")
-    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2")
+    act_val_cust_3M: bool = Field(..., description="Valeur client active sur 3 mois")
+    Nb_lignes_N_signature_4: float = Field(..., description="Nombre de lignes signature 4")
+    EC: float = Field(..., description="Pourcentage EC (précédemment %EC)")
     annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis le dernier achat")
+    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1")
+    Nb_lignes_N_signature_1: float = Field(..., description="Nombre de lignes signature 1")
+    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2")
     Turnover_N_signature_3: float = Field(..., description="Turnover signature 3")
     Turnover_N_signature_1: float = Field(..., description="Turnover signature 1")
-    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1")
-    Famille_10_N_signature_3: float = Field(..., description="Famille 10 signature 3")
-    Famille_1_N_signature_3: float = Field(..., description="Famille 1 signature 3")
-    division: str = Field(..., description="Division (catégoriel)")
-    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1")
+    Famille_5_N_signature_1: float = Field(..., description="Famille 5 signature 1")
+    Famille_2_N_signature_2: float = Field(..., description="Famille 2 signature 2")
     annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis la première facture")
-    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1")
-    Turnover_N_signature_2: float = Field(..., description="Turnover signature 2")
-    Famille_12_N_signature_1: float = Field(..., description="Famille 12 signature 1")
-    Nb_lignes_N_signature_1: float = Field(..., description="Nombre de lignes signature 1")
+    Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1")
+    Famille_14_N_signature_2: float = Field(..., description="Famille 14 signature 2")
+    Famille_1_N_signature_1: float = Field(..., description="Famille 1 signature 1")
+    Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1")
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -190,24 +194,24 @@ class ClientData(BaseModel):
             "example": {
                 "customer_value_score": 50.0,
                 "clp_contrat_ap_stat": "BK",
-                "act_val_cust_3M": True,
                 "Panier_Moyen_N_signature_3": 120.5,
                 "GrandCompte": False,
+                "act_val_cust_3M": True,
+                "Nb_lignes_N_signature_4": 5.0,
                 "EC": 12.5,
-                "Panier_Moyen_N_signature_2": 135.0,
                 "annees_depuis_dernier_achat": 1.5,
+                "Panier_Moyen_N_signature_1": 150.0,
+                "Nb_lignes_N_signature_1": 8.0,
+                "Panier_Moyen_N_signature_2": 135.0,
                 "Turnover_N_signature_3": 1500.0,
                 "Turnover_N_signature_1": 3500.0,
-                "Famille_0_N_signature_1": 0.0,
-                "Famille_10_N_signature_3": 0.0,
-                "Famille_1_N_signature_3": 0.0,
-                "division": "DIV_A",
-                "Famille_2_N_signature_1": 0.0,
+                "Famille_5_N_signature_1": 0.0,
+                "Famille_2_N_signature_2": 0.0,
                 "annees_depuis_1ere_facture": 4.2,
-                "Panier_Moyen_N_signature_1": 150.0,
-                "Turnover_N_signature_2": 2000.0,
-                "Famille_12_N_signature_1": 0.0,
-                "Nb_lignes_N_signature_1": 8.0,
+                "Famille_11_N_signature_1": 0.0,
+                "Famille_14_N_signature_2": 0.0,
+                "Famille_1_N_signature_1": 0.0,
+                "Famille_2_N_signature_1": 0.0,
             }
         },
     )
