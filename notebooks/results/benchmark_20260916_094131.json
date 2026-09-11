@@ -1,0 +1,295 @@
+{
+  "timestamp": "2026-09-16T07:41:31.606779+00:00",
+  "api_url": "https://p8-oc-mlops-2-2.onrender.com",
+  "payload": {
+    "n_features": 20,
+    "features": [
+      "EC",
+      "Famille_0_N_signature_1",
+      "Famille_11_N_signature_1",
+      "Famille_1_N_signature_1",
+      "Famille_2_N_signature_1",
+      "Famille_2_N_signature_2",
+      "Famille_6_N_signature_3",
+      "GrandCompte",
+      "Nb_lignes_N_signature_1",
+      "Panier_Moyen_N_signature_1",
+      "Panier_Moyen_N_signature_2",
+      "Panier_Moyen_N_signature_3",
+      "Turnover_N_signature_1",
+      "Turnover_N_signature_3",
+      "act_val_cust_3M",
+      "annees_depuis_1ere_facture",
+      "annees_depuis_dernier_achat",
+      "clp_contrat_ap_stat",
+      "customer_value_score",
+      "division"
+    ]
+  },
+  "sequential": {
+    "n_requests": 20,
+    "stats": {},
+    "errors": [
+      {
+        "index": 0,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 1,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 2,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 3,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 4,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 5,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 6,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 7,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 8,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 9,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 10,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 11,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 12,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 13,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 14,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 15,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 16,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 17,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 18,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 19,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid string\",\"input\":0.0},{\"type\":\"string_type\",\"loc\":[\"body\",\"division\"],\"msg\":\"Input should be a valid"
+      }
+    ],
+    "n_success": 0
+  },
+  "concurrent": {
+    "n_requests": 30,
+    "stats": {},
+    "errors": [
+      {
+        "index": 0,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 1,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 2,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 3,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 4,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 5,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 6,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 7,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 8,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 9,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 10,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 11,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 12,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 13,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 14,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 15,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 16,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 17,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 18,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 19,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 20,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 21,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 22,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 23,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 24,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 25,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 26,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 27,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 28,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      },
+      {
+        "index": 29,
+        "status": 422,
+        "body": "{\"detail\":[{\"type\":\"string_type\",\"loc\":[\"body\",\"clp_contrat_ap_stat\"],\"msg\":\"Input should be a valid"
+      }
+    ],
+    "n_success": 0,
+    "throughput_rps": 0.0,
+    "total_time_s": 0.3149153000001661
+  }
+}

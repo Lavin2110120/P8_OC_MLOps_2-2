@@ -13,18 +13,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 @pytest.fixture(autouse=True)
 def isolate_log_file(tmp_path, monkeypatch):
     """Redirige le fichier de logs vers un fichier temporaire isolé.
-    
+
     CRITIQUE : le patch doit être fait AVANT d'importer src.main
     pour que PREDICTIONS_LOG_FILE soit bien positionné."""
     log_file = tmp_path / "predictions_test.jsonl"
     monkeypatch.setenv("PREDICTIONS_LOG_FILE", str(log_file))
+    monkeypatch.setenv("SKIP_DB_INIT", "1")  # évite les timeouts vers Postgres
     return log_file
 
 
 @pytest.fixture
 def client(isolate_log_file):
     """Client HTTP synchrone avec lifespan.
-    
+
     Import retardé de src.main pour que le patch env soit actif."""
     import src.main
     from src.main import app
@@ -83,7 +84,6 @@ class TestPredictMonitoring:
 
     def test_logs_stats_after_predictions(self, client, valid_payload, isolate_log_file):
         """Vérifie que /logs/stats reflète les prédictions effectuées."""
-        # Vide le fichier de logs
         isolate_log_file.write_text("")
 
         for _ in range(5):
@@ -111,10 +111,8 @@ class TestPredictMonitoring:
         response = client.get("/logs/export")
         assert response.status_code == 200
 
-        # Content-Type correct
         assert response.headers["content-type"] == "application/x-ndjson"
 
-        # Vérifie que chaque ligne est un JSON valide
         import json
 
         lines = response.text.strip().split("\n")

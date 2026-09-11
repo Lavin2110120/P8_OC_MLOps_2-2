@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-09-16T07:29:20.867338+00:00",
+  "api_url": "https://p8-oc-mlops-2-2.onrender.com",
+  "payload": {
+    "n_features": 20,
+    "features": [
+      "EC",
+      "Famille_0_N_signature_1",
+      "Famille_11_N_signature_1",
+      "Famille_1_N_signature_1",
+      "Famille_2_N_signature_1",
+      "Famille_2_N_signature_2",
+      "Famille_6_N_signature_3",
+      "GrandCompte",
+      "Nb_lignes_N_signature_1",
+      "Panier_Moyen_N_signature_1",
+      "Panier_Moyen_N_signature_2",
+      "Panier_Moyen_N_signature_3",
+      "Turnover_N_signature_1",
+      "Turnover_N_signature_3",
+      "act_val_cust_3M",
+      "annees_depuis_1ere_facture",
+      "annees_depuis_dernier_achat",
+      "clp_contrat_ap_stat",
+      "customer_value_score",
+      "division"
+    ]
+  },
+  "sequential": {
+    "n_requests": 20,
+    "stats": {
+      "mean_ms": 430.25584500000497,
+      "p95_ms": 796.269675000002,
+      "p99_ms": 801.4479350000181,
+      "min_ms": 100.46160000001692,
+      "max_ms": 802.7425000000221,
+      "count": 20
+    },
+    "errors": [],
+    "n_success": 20
+  },
+  "concurrent": {
+    "n_requests": 30,
+    "stats": {
+      "mean_ms": 3946.105629999996,
+      "p95_ms": 5696.188239999964,
+      "p99_ms": 5763.516485999979,
+      "min_ms": 498.69999999998527,
+      "max_ms": 5790.726199999995,
+      "count": 30
+    },
+    "errors": [],
+    "n_success": 30,
+    "throughput_rps": 5.176490189878122,
+    "total_time_s": 5.7954326000000265
+  }
+}

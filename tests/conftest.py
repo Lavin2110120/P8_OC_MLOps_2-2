@@ -1,11 +1,12 @@
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from starlette.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -14,66 +15,59 @@ from src.main import app, ClientData
 
 VALID_PAYLOAD = {
     "customer_value_score": 50.0,
-    "clp_contrat_ap_stat": "BK",
     "Panier_Moyen_N_signature_3": 120.5,
+    "clp_contrat_ap_stat": "BK",
     "GrandCompte": False,
-    "act_val_cust_3M": True,
-    "Nb_lignes_N_signature_4": 5.0,
-    "EC": 12.5,
+    "Turnover_N_signature_1": 3500.0,
     "annees_depuis_dernier_achat": 1.5,
     "Panier_Moyen_N_signature_1": 150.0,
-    "Nb_lignes_N_signature_1": 8.0,
-    "Panier_Moyen_N_signature_2": 135.0,
     "Turnover_N_signature_3": 1500.0,
-    "Turnover_N_signature_1": 3500.0,
-    "Famille_5_N_signature_1": 0.0,
-    "Famille_2_N_signature_2": 0.0,
-    "annees_depuis_1ere_facture": 4.2,
+    "EC": 12.5,
+    "Panier_Moyen_N_signature_2": 135.0,
     "Famille_11_N_signature_1": 0.0,
-    "Famille_14_N_signature_2": 0.0,
-    "Famille_1_N_signature_1": 0.0,
+    "annees_depuis_1ere_facture": 4.2,
+    "Famille_0_N_signature_1": 0.0,
+    "Famille_2_N_signature_2": 0.0,
+    "Nb_lignes_N_signature_1": 8.0,
     "Famille_2_N_signature_1": 0.0,
+    "act_val_cust_3M": True,
+    "Famille_1_N_signature_1": 0.0,
+    "division": "DIV1",
+    "Famille_6_N_signature_3": 0.0,
 }
+
 
 @pytest.fixture
 def valid_payload():
     return VALID_PAYLOAD.copy()
 
+
 @pytest.fixture
 def invalid_payload():
-    return {
-        "customer_value_score": 50.0,
-        "clp_contrat_ap_stat": "BK",
-        "Panier_Moyen_N_signature_3": 120.5,
-        "GrandCompte": False,
-        "act_val_cust_3M": True,
-        "Nb_lignes_N_signature_4": 5.0,
-        "EC": 12.5,
-        "annees_depuis_dernier_achat": 1.5,
-        "Panier_Moyen_N_signature_1": 150.0,
-        "Nb_lignes_N_signature_1": 8.0,
-        "Panier_Moyen_N_signature_2": 135.0,
-        "Turnover_N_signature_3": 1500.0,
-        "Famille_5_N_signature_1": 0.0,
-        "Famille_2_N_signature_2": 0.0,
-        "annees_depuis_1ere_facture": 4.2,
-        "Famille_11_N_signature_1": 0.0,
-        "Famille_14_N_signature_2": 0.0,
-        "Famille_1_N_signature_1": 0.0,
-        "Famille_2_N_signature_1": 0.0,
-    }
+    p = VALID_PAYLOAD.copy()
+    p.pop("Turnover_N_signature_1")
+    return p
+
 
 @pytest_asyncio.fixture
 async def async_client():
     """Client HTTP asynchrone avec lifespan actif."""
     from src.main import lifespan as app_lifespan
-    
+
     async with app_lifespan(app):
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test"
         ) as ac:
             yield ac
+
+
+@pytest.fixture
+def client_sync():
+    """Client HTTP synchrone avec lifespan actif (pour tests de charge non-async)."""
+    with TestClient(app) as c:
+        yield c
+
 
 @pytest.fixture(autouse=True)
 def mock_loaded_onnx_model(tmp_path, monkeypatch):
@@ -111,7 +105,16 @@ def mock_loaded_onnx_model(tmp_path, monkeypatch):
     with patch("src.main.ort.InferenceSession", return_value=fake_session):
         yield fake_session
 
+
 @pytest.fixture
 def real_db(mocker):
     """Fixture utilitaire qui restaure les fonctions BDD réelles."""
     mocker.stopall()
+
+
+@pytest.fixture(autouse=True)
+def _skip_db_init(monkeypatch):
+    """Évite les timeouts réseau vers PostgreSQL pendant les tests unitaires."""
+    async def _noop(*args, **kwargs):
+        return None
+    monkeypatch.setattr(src.main, "log_prediction_to_db", _noop)

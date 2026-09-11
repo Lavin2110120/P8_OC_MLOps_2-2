@@ -57,14 +57,16 @@ class TestPrediction:
         assert response.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_predict_with_none_optional_fields(self, async_client, valid_payload):
-        payload = valid_payload.copy()
-        payload["customer_value_score"] = None
-        payload["clp_contrat_ap_stat"] = None
-        response = await async_client.post("/predict", json=payload)
-        assert response.status_code == 200
-        assert response.json()["status"] == "success"
-        assert response.json()["prediction"] in [0, 1]
+    async def test_predict_rejects_none_on_required_fields(self, async_client, valid_payload):
+        """Les 20 features de config_production.json sont obligatoires : None → 422."""
+        for field in ("customer_value_score", "clp_contrat_ap_stat"):
+            payload = valid_payload.copy()
+            payload[field] = None
+            response = await async_client.post("/predict", json=payload)
+            assert response.status_code == 422, f"{field}=None devrait être rejeté"
+            assert any(
+                field in str(err) for err in response.json()["detail"]
+            ), f"L'erreur 422 devrait mentionner {field}"
 
     @pytest.mark.asyncio
     @pytest.mark.performance

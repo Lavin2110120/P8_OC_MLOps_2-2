@@ -160,61 +160,61 @@ async def add_process_time_header(request: Request, call_next):
 
 
 # --- SCHÉMAS PYDANTIC ---
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
-
-
 class ClientData(BaseModel):
-    """Données client conformes aux 20 features de production."""
+    """Données client conformes aux 20 features attendues par le modèle ONNX en production.
+    Source : NB3 - inspection ONNX schema + config_production.json
+    """
 
-    customer_value_score: Optional[float] = Field(default=None, description="Score de valeur client")
-    clp_contrat_ap_stat: Optional[str] = Field(default=None, description="Statut contrat AP (catégoriel)")
+    customer_value_score: float = Field(..., description="Score de valeur client")
     Panier_Moyen_N_signature_3: float = Field(..., description="Panier moyen signature 3")
+    clp_contrat_ap_stat: str = Field(..., description="Statut contrat AP (catégoriel)")
     GrandCompte: bool = Field(..., description="Indicateur grand compte")
-    act_val_cust_3M: bool = Field(..., description="Valeur client active sur 3 mois")
-    Nb_lignes_N_signature_4: float = Field(..., description="Nombre de lignes signature 4")
-    EC: float = Field(..., description="Pourcentage EC (précédemment %EC)")
-    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis le dernier achat")
-    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1")
-    Nb_lignes_N_signature_1: float = Field(..., description="Nombre de lignes signature 1")
-    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2")
-    Turnover_N_signature_3: float = Field(..., description="Turnover signature 3")
     Turnover_N_signature_1: float = Field(..., description="Turnover signature 1")
-    Famille_5_N_signature_1: float = Field(..., description="Famille 5 signature 1")
-    Famille_2_N_signature_2: float = Field(..., description="Famille 2 signature 2")
-    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis la première facture")
+    annees_depuis_dernier_achat: float = Field(..., ge=0.0, description="Années depuis dernier achat")
+    Panier_Moyen_N_signature_1: float = Field(..., description="Panier moyen signature 1")
+    Turnover_N_signature_3: float = Field(..., description="Turnover signature 3")
+    EC: float = Field(..., description="Pourcentage EC")
+    Panier_Moyen_N_signature_2: float = Field(..., description="Panier moyen signature 2")
     Famille_11_N_signature_1: float = Field(..., description="Famille 11 signature 1")
-    Famille_14_N_signature_2: float = Field(..., description="Famille 14 signature 2")
-    Famille_1_N_signature_1: float = Field(..., description="Famille 1 signature 1")
+    annees_depuis_1ere_facture: float = Field(..., ge=0.0, description="Années depuis 1ère facture")
+    Famille_0_N_signature_1: float = Field(..., description="Famille 0 signature 1")
+    Famille_2_N_signature_2: float = Field(..., description="Famille 2 signature 2")
+    Nb_lignes_N_signature_1: float = Field(..., description="Nombre de lignes signature 1")
     Famille_2_N_signature_1: float = Field(..., description="Famille 2 signature 1")
+    act_val_cust_3M: bool = Field(..., description="Valeur client active 3M")
+    Famille_1_N_signature_1: float = Field(..., description="Famille 1 signature 1")
+    division: str = Field(..., description="Division commerciale (catégoriel)")
+    Famille_6_N_signature_3: float = Field(..., description="Famille 6 signature 3")
 
     model_config = ConfigDict(
         populate_by_name=True,
         json_schema_extra={
             "example": {
                 "customer_value_score": 50.0,
-                "clp_contrat_ap_stat": "BK",
                 "Panier_Moyen_N_signature_3": 120.5,
+                "clp_contrat_ap_stat": "BK",
                 "GrandCompte": False,
-                "act_val_cust_3M": True,
-                "Nb_lignes_N_signature_4": 5.0,
-                "EC": 12.5,
+                "Turnover_N_signature_1": 3500.0,
                 "annees_depuis_dernier_achat": 1.5,
                 "Panier_Moyen_N_signature_1": 150.0,
-                "Nb_lignes_N_signature_1": 8.0,
-                "Panier_Moyen_N_signature_2": 135.0,
                 "Turnover_N_signature_3": 1500.0,
-                "Turnover_N_signature_1": 3500.0,
-                "Famille_5_N_signature_1": 0.0,
-                "Famille_2_N_signature_2": 0.0,
-                "annees_depuis_1ere_facture": 4.2,
+                "EC": 12.5,
+                "Panier_Moyen_N_signature_2": 135.0,
                 "Famille_11_N_signature_1": 0.0,
-                "Famille_14_N_signature_2": 0.0,
-                "Famille_1_N_signature_1": 0.0,
+                "annees_depuis_1ere_facture": 4.2,
+                "Famille_0_N_signature_1": 0.0,
+                "Famille_2_N_signature_2": 0.0,
+                "Nb_lignes_N_signature_1": 8.0,
                 "Famille_2_N_signature_1": 0.0,
+                "act_val_cust_3M": True,
+                "Famille_1_N_signature_1": 0.0,
+                "division": "DIV1",
+                "Famille_6_N_signature_3": 0.0,
             }
         },
     )
+
+
 class PredictionResponse(BaseModel):
     prediction: int = Field(..., description="Classe prédite (0 ou 1)")
     probability: Optional[float] = Field(None, description="Probabilité classe 1")
@@ -396,7 +396,7 @@ def export_prediction_logs(
     """Exporte le journal de prédictions JSONL (pour le monitoring NB4).
 
     - status_filter : "success" ou "error" pour ne garder qu'un type de record
-    - limit         : ne renvoyer que les N derniers enregistrements
+    - limit         : ne renvoyer que les N derniers enregistrements valides
     """
     if not PREDICTIONS_LOG_FILE.exists():
         raise HTTPException(
@@ -407,24 +407,53 @@ def export_prediction_logs(
     with _log_lock:  # évite de lire pendant une écriture
         lines = PREDICTIONS_LOG_FILE.read_text(encoding="utf-8").splitlines()
 
-    # On ne renvoie que les lignes JSON valides : le NB4 n'aura jamais
-    # à gérer de JSONDecodeError sur l'export
+    # On ne renvoie que les lignes JSON valides et cohérentes :
+    # le NB4 n'aura jamais à gérer de JSONDecodeError ni de champs manquants
     valid_lines = []
+    n_total = len(lines)
+    n_corrupt = 0
+    n_incomplete = 0
+
     for line in lines:
         if not line.strip():
             continue
+
         try:
             rec = json.loads(line)
         except json.JSONDecodeError:
+            n_corrupt += 1
             continue
-        if status_filter and rec.get("status") != status_filter:
+
+        # Validation de cohérence selon le statut (même contrat que log_prediction)
+        rec_status = rec.get("status")
+        if rec_status == "success":
+            if not all(k in rec for k in _REQUIRED_SUCCESS_KEYS):
+                n_incomplete += 1
+                continue
+        elif rec_status == "error":
+            if not all(k in rec for k in ("status", "latency_ms", "inputs", "error")):
+                n_incomplete += 1
+                continue
+        else:
+            # status inconnu/absent -> on l'exclut aussi
+            n_incomplete += 1
             continue
+
+        if status_filter and rec_status != status_filter:
+            continue
+
         valid_lines.append(line)
 
     if limit is not None and limit > 0:
         valid_lines = valid_lines[-limit:]
 
-    return PlainTextResponse("\n".join(valid_lines) + "\n", media_type="application/x-ndjson")
+    print(
+        f"📤 Export logs : {len(valid_lines)} valides / {n_total} lignes lues "
+        f"({n_corrupt} corrompues, {n_incomplete} incomplètes exclues)"
+    )
+
+    body = "\n".join(valid_lines) + ("\n" if valid_lines else "")
+    return PlainTextResponse(body, media_type="application/x-ndjson")
 
 @app.get("/logs/stats", tags=["Monitoring"])
 def prediction_logs_stats():

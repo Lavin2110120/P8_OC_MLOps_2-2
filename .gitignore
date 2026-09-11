@@ -13,10 +13,8 @@ artifacts/
 mlruns/
 **/mlruns/
 
-# On conserve le suivi d'historique MLflow pour le correcteur
-# !reports/historique_optimisations.csv
-
-# Exclusion des artefacts de modèles lourds
+*.jsonl
+*.json
 *.joblib
 *.pkl
 
@@ -27,6 +25,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.exe
 
 # Environnements virtuels (fichiers ET dossiers)
 env/
@@ -70,7 +69,7 @@ dist/
 logs/*.jsonl
 logs/*.log
 
-# --- EVITER D'IGNORER LE .GITKEEP ---
+
 !logs/.gitkeep
 !reports/.gitkeep
 
@@ -81,3 +80,4 @@ logs/*.log
 Thumbs.db
 .vscode/
 .idea/
+*.pptx

@@ -46,34 +46,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-      - name: Run Pytest
-<<<<<<< HEAD
-=======
-        env:
-<<<<<<< HEAD
-          DATABASE_URL: postgresql+asyncpg://p8_db_ba6y_user:xPkdpcurgzpMopfxc8JRAnvEspmurHib@dpg-d9q6o5lbedkc73b78mtg-a.frankfurt-postgres.render.com/p8_db_ba6y?ssl=require
->>>>>>> bc6e882 (add storage data with space postgresql)
-=======
-=======
-      - name: Run Pytest
-        env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@localhost:5432/test_db
-=======
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
->>>>>>> 1416814 (pytests fixed)
+      - name: Wait for PostgreSQL to be ready
         run: |
-          pytest
-=======
-      - name: Run unit tests
-        run: pytest tests/test_api.py -v --cov=src --cov-report=term-missing
+          until pg_isready -h localhost -p 5432 -U test_user; do
+            echo "En attente de PostgreSQL..."
+            sleep 2
+          done
 
-      - name: Run integration tests (DB)
-        run: pytest tests/test_integration_db.py -v --cov=src --cov-report=term-missing
-=======
       - name: Run all tests with coverage
         run: |
           pytest tests/ \
@@ -81,10 +60,9 @@ jobs:
             --cov-report=term-missing \
             --cov-report=xml \
             -v
->>>>>>> 273db26 (fix: tests correction, update  pyproject.toml and  CI/CD)
         env:
           DATABASE_URL: postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db
->>>>>>> 8ba9297 (update Render DB, scripts, MLflow and README)
+          PYTHONUNBUFFERED: "1"
 
       - name: Upload coverage report
         if: always()
@@ -96,28 +74,15 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
-<<<<<<< HEAD
-  # 3. Déploiement automatique sur Render
->>>>>>> 4c2801d (step 4: profiling and onxx then model optimization with reports)
-=======
->>>>>>> 8ba9297 (update Render DB, scripts, MLflow and README)
   deploy:
     needs: test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-<<<<<<< HEAD
-      - name: Trigger Deploy on Render
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
->>>>>>> db4803c (update yaml with secrets, main.py with latency middleware, bugs fixed)
-=======
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Deploy to Render
->>>>>>> 8ba9297 (update Render DB, scripts, MLflow and README)
         run: |
           curl -X POST \
             -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
