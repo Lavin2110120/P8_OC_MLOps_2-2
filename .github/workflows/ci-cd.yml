@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: ["main"]
+    branches: ["main", "development"]
   pull_request:
-    branches: ["main"]
+    branches: ["main", "development"]
 
 jobs:
   test:
@@ -18,7 +18,11 @@ jobs:
           POSTGRES_DB: test_db
         ports:
           - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - name: Checkout repository
@@ -30,37 +34,33 @@ jobs:
           python-version: "3.11"
 
       - name: Cache pip dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt pytest pytest-asyncio pytest-cov httpx pytest-docker
+          pip install -e ".[dev]"
 
-      - name: Run unit tests
-        run: pytest tests/test_api.py -v --cov=src --cov-report=term-missing
-
-      - name: Run integration tests (DB)
-        run: pytest tests/test_integration_db.py -v --cov=src --cov-report=term-missing
+      - name: Run all tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=src \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            -v
         env:
           DATABASE_URL: postgresql+asyncpg://test_user:test_pass@localhost:5432/test_db
 
-      - name: Run security tests
-        run: pytest tests/test_security_resilience.py -v --cov=src --cov-report=term-missing
-
-      - name: Run deployment configuration tests
-        run: pytest tests/test_deployment_config.py -v --cov=src --cov-report=term-missing
-
       - name: Upload coverage report
         if: always()
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
         env:

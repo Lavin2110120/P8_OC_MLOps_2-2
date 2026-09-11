@@ -7,9 +7,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src.main import app, PREDICTIONS_LOG_FILE
 from src.database import DATABASE_URL
 
+
+# ---------------------------------------------------------------------------
+# Fixture client synchrone (spécifique à ce fichier)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def client():
+    """Client HTTP synchrone avec lifespan."""
+    from starlette.testclient import TestClient
+    with TestClient(app) as c:
+        yield c
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
 def test_predict(client, valid_payload):
     response = client.post("/predict", json=valid_payload)
     assert response.status_code == 200
+
 
 class TestConfiguration:
     """Tests de vérification des variables de configuration."""
@@ -18,7 +36,7 @@ class TestConfiguration:
         """Vérifie que DATABASE_URL est bien configurée."""
         assert DATABASE_URL is not None
         assert "postgresql" in DATABASE_URL
-        assert "render.com" in DATABASE_URL  # Vérifie l'URL de Render
+        assert "render.com" in DATABASE_URL
 
     def test_logs_directory_exists(self):
         """Vérifie que le répertoire de logs existe."""
@@ -30,22 +48,28 @@ class TestConfiguration:
         model_path = Path(__file__).resolve().parent.parent / "models" / "best_pipeline_xgboost.onnx"
         assert model_path.exists(), f"Modèle ONNX introuvable : {model_path}"
 
+
 class TestEnvironmentVariables:
     """Tests de validation des variables d'environnement."""
 
-    def test_env_variable_priority(self):
+    def test_env_variable_priority(self, monkeypatch):
         """Vérifie que les variables d'environnement priment sur les valeurs par défaut."""
-        os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost/test"
-        from importlib import reload
-        import src.main
-        reload(src.main)
-        assert "localhost" in src.main.DATABASE_URL
+        # monkeypatch restaure automatiquement l'env après le test
+        monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://user:pass@localhost/test")
 
-    def test_missing_env_variable_fallback(self):
-        """Vérifie que l'application fonctionne avec les valeurs par défaut."""
-        if "DATABASE_URL" in os.environ:
-            del os.environ["DATABASE_URL"]
+        import src.database
         from importlib import reload
-        import src.main
-        reload(src.main)
-        assert "render.com" in src.main.DATABASE_URL
+        reload(src.database)
+
+        assert "localhost" in src.database.DATABASE_URL
+
+    def test_missing_env_variable_fallback(self, monkeypatch):
+        """Vérifie que l'application fonctionne avec les valeurs par défaut."""
+        # Supprime proprement la variable d'env pour ce test uniquement
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+
+        import src.database
+        from importlib import reload
+        reload(src.database)
+
+        assert "render.com" in src.database.DATABASE_URL
