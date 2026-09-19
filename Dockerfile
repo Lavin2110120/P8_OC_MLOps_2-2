@@ -49,8 +49,8 @@ RUN adduser --disabled-password --gecos "" appuser
 COPY --from=builder /install /usr/local
 
 # Copie du code source (dossier src/) et des modèles ONNX
-COPY ./src /app/src
 COPY ./models /app/models
+COPY ./src /app/src
 
 # Structure des logs et attribution des permissions à appuser
 RUN mkdir -p /app/logs && chown -R appuser:appuser /app
